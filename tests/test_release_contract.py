@@ -47,6 +47,8 @@ class ReleaseContractTests(unittest.TestCase):
     bundle = bundle_path.read_text(encoding="utf-8")
     self.assertGreater(len(bundle), 10_000)
     self.assertIn("data-r1db-console", bundle)
+    self.assertIn("Secure access to this R1DB deployment.", bundle)
+    self.assertNotIn("MeshDB", bundle)
     self.assertIn("/api/v2/login/", bundle)
     self.assertIn("/api/v2/sql/", bundle)
     self.assertNotRegex(bundle, r"https?://")

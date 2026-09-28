@@ -591,7 +591,7 @@
           <form class="mesh-login-panel" id="mesh-login-form">
             <p class="mesh-kicker">Database console</p>
             <h1>Sign in to your cluster</h1>
-            <p class="mesh-muted">Secure access to this MeshDB deployment.</p>
+            <p class="mesh-muted">Secure access to this R1DB deployment.</p>
             <div class="mesh-error" id="mesh-login-error" ${message ? '' : 'hidden'}>${htmlEscape(message)}</div>
             <div class="mesh-field">
               <label for="mesh-username">User</label>
