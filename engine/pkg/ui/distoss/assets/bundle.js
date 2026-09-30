@@ -306,6 +306,7 @@
     .mesh-table tbody tr:hover { background: #f8fbfa; }
     .mesh-table tr:last-child td { border-bottom: 0; }
     .mesh-code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+    .mesh-table td.mesh-value-compact { overflow-wrap: normal; white-space: nowrap; }
     .mesh-empty { padding: 32px 16px; color: #6b797f; text-align: center; font-size: 13px; }
     .mesh-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #e0e6e8; border-top: 0; padding: 8px 12px; color: #68777d; font-size: 12px; }
     .mesh-pagination-actions { display: flex; align-items: center; gap: 6px; }
@@ -818,7 +819,8 @@
     const head = columnNames.map((name) => `<th scope="col">${htmlEscape(name)}</th>`).join('');
     const body = visibleRows.map((row) => `<tr>${columnNames.map((name) => {
       const value = valueText(row[name]);
-      return `<td class="mesh-code" title="${htmlEscape(value)}">${htmlEscape(value)}</td>`;
+      const compact = value.length <= 12 && !/\s/.test(value) ? ' mesh-value-compact' : '';
+      return `<td class="mesh-code${compact}" title="${htmlEscape(value)}">${htmlEscape(value)}</td>`;
     }).join('')}</tr>`).join('');
     const end = Math.min(rows.length, start + visibleRows.length);
     const pagination = pageCount > 1 || options.showPageSize ? `
@@ -2030,6 +2032,7 @@
       document.getElementById('mesh-result-meta').textContent = `${result.tag || 'SQL'} / ${resultRows(result).length} rows / ${elapsed.toFixed(0)} ms / ${result.retries} retries`;
       meta.textContent = 'Completed';
       panel.hidden = false;
+      void loadDatabaseOptions();
     } catch (error) {
       if (!state.session || !isCurrentDatabase(requestState) || state.view !== 'sql') return;
       errorBox.textContent = readableError(error);

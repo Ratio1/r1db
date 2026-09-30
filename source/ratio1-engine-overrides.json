@@ -268,7 +268,7 @@
     },
     {
       "path": "engine/pkg/ui/distoss/assets/bundle.js",
-      "sha256": "c2abfe4466e0a39d5fd4e578b797ef2dcd25ff2a7c049b63adf0879fe3480b3a",
+      "sha256": "396b534f2d1775bfaf7ab74c84d3f1ba49cd51dc1e37cd99661aa088682e4894",
       "reason": "Dependency-free first-party browser console with a same-origin login handoff, observed node-liveness overview, table inventory, on-demand table creation, scrollable paginated SQL results, CONNECT-filtered database switching, tabbed database/user/access management, and responsive controls. It normalizes the v2 user-object response, retains SQL drafts on navigation, fixes compact layout spacing, and communicates local health and list bounds accurately."
     },
     {
