@@ -5,10 +5,22 @@
 (() => {
   'use strict';
 
+  const storageKey = 'r1db-console-session-v1';
+  const handoff = document.getElementById('r1db-console-handoff');
+  if (handoff) {
+    try {
+      const { session, username, database } = handoff.dataset;
+      if (!session || !username || !database) throw new Error('Incomplete console handoff.');
+      sessionStorage.setItem(storageKey, JSON.stringify({ session, username, database }));
+      location.replace('/');
+    } catch (_) {
+      location.replace('/?console_login=storage');
+    }
+    return;
+  }
+
   const root = document.getElementById('react-layout');
   if (!root) return;
-
-  const storageKey = 'r1db-console-session-v1';
   const defaultQuery = 'SELECT current_timestamp AS now;';
   const state = {
     session: '',
@@ -1928,6 +1940,9 @@
     renderShell();
     loadOverview();
   } else {
-    renderLogin();
+    const handoffError = new URLSearchParams(location.search).get('console_login');
+    if (handoffError) history.replaceState(null, '', location.pathname);
+    renderLogin(handoffError === 'failed' ? 'The job credentials could not sign in. Check the database user and password.' :
+      handoffError === 'storage' ? 'This browser could not save the console session. Sign in manually.' : '');
   }
 })();

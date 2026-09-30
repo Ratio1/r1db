@@ -188,6 +188,7 @@ func registerRoutes(
 	}{
 		// Pass through auth-related endpoints to the auth server.
 		{"login/", a.authServer.ServeHTTP, false /* requiresAuth */, regularRole, noOption, false},
+		{"console-login/", a.authServer.ServeHTTP, false /* requiresAuth */, regularRole, noOption, false},
 		{"logout/", a.authServer.ServeHTTP, false /* requiresAuth */, regularRole, noOption, false},
 
 		// Directly register other endpoints in the api server.
