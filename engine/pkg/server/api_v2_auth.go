@@ -8,12 +8,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// Modified by Ratio1 in 2026; see RATIO1_PATCHES.md.
+
 package server
 
 import (
 	"context"
 	"encoding/base64"
+	"html"
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -62,6 +67,7 @@ func newAuthenticationV2Server(
 
 func (a *authenticationV2Server) registerRoutes() {
 	a.bindEndpoint("login/", a.login)
+	a.bindEndpoint("console-login/", a.consoleLogin)
 	a.bindEndpoint("logout/", a.logout)
 }
 
@@ -187,6 +193,68 @@ func (a *authenticationV2Server) login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSONResponse(r.Context(), w, http.StatusOK, &loginResponse{Session: session})
+}
+
+// consoleLogin establishes the same API session as login, then lets the console
+// store it on its own origin. Credentials never appear in a redirect URL.
+func (a *authenticationV2Server) consoleLogin(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("X-Frame-Options", "DENY")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; base-uri 'none'; frame-ancestors 'none'")
+	if r.Method != http.MethodPost {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	origin := r.Header.Get("Origin")
+	allowedOrigins := os.Getenv("CRDB_CONSOLE_LOGIN_ORIGINS")
+	if allowedOrigins == "" {
+		allowedOrigins = "https://deeploy.ratio1.ai,https://devnet-deeploy.ratio1.ai,https://testnet-deeploy.ratio1.ai"
+	}
+	allowed := false
+	for _, candidate := range strings.Split(allowedOrigins, ",") {
+		if origin != "" && origin == strings.TrimSpace(candidate) {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		http.Error(w, "console handoff origin is not allowed", http.StatusForbidden)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 8192)
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid credentials form", http.StatusBadRequest)
+		return
+	}
+	userInput := strings.TrimSpace(r.PostForm.Get("username"))
+	database := strings.TrimSpace(r.PostForm.Get("database"))
+	if userInput == "" || database == "" {
+		http.Error(w, "username and database are required", http.StatusBadRequest)
+		return
+	}
+	user, _ := username.MakeSQLUsernameFromUserInput(userInput, username.PurposeValidation)
+	verified, expired, err := a.authServer.verifyPasswordDBConsole(a.ctx, user, r.PostForm.Get("password"))
+	if err != nil {
+		apiV2InternalError(r.Context(), err, w)
+		return
+	}
+	if expired || !verified {
+		http.Redirect(w, r, "/?console_login=failed", http.StatusSeeOther)
+		return
+	}
+	session, err := a.createSessionFor(a.ctx, user)
+	if err != nil {
+		apiV2InternalError(r.Context(), err, w)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(`<!doctype html><html><head><meta charset="utf-8"><title>Opening R1DB Console</title></head><body>` +
+		`<div id="r1db-console-handoff" data-session="` + html.EscapeString(session) +
+		`" data-username="` + html.EscapeString(user.Normalized()) +
+		`" data-database="` + html.EscapeString(database) +
+		`">Opening R1DB Console...</div><script src="/bundle.js"></script></body></html>`))
 }
 
 // swagger:model logoutResponse

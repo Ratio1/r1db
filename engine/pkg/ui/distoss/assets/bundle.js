@@ -5,10 +5,22 @@
 (() => {
   'use strict';
 
+  const storageKey = 'r1db-console-session-v1';
+  const handoff = document.getElementById('r1db-console-handoff');
+  if (handoff) {
+    try {
+      const { session, username, database } = handoff.dataset;
+      if (!session || !username || !database) throw new Error('Incomplete console handoff.');
+      sessionStorage.setItem(storageKey, JSON.stringify({ session, username, database }));
+      location.replace('/');
+    } catch (_) {
+      location.replace('/?console_login=storage');
+    }
+    return;
+  }
+
   const root = document.getElementById('react-layout');
   if (!root) return;
-
-  const storageKey = 'r1db-console-session-v1';
   const defaultQuery = 'SELECT current_timestamp AS now;';
   const state = {
     session: '',
@@ -16,6 +28,7 @@
     database: 'defaultdb',
     databaseRevision: 0,
     view: 'overview',
+    nodeHealth: { snapshot: null, lastSuccessAt: 0, loading: false, error: '', inFlight: null, timer: null, generation: 0 },
     busy: false,
     capabilities: {
       loaded: false,
@@ -274,6 +287,10 @@
     }
     .mesh-panel-head h2 { margin: 0; font-size: 15px; }
     .mesh-panel-body { min-width: 0; padding: 16px 0 0; }
+    .mesh-node-summary { display: flex; flex-wrap: wrap; gap: 8px 24px; padding: 12px 0; font-size: 13px; }
+    .mesh-node-summary strong { color: #172126; }
+    .mesh-node-meta { margin: 0 0 10px; color: #607078; font-size: 12px; }
+    .mesh-node-meta.stale { color: #9b4d17; font-weight: 700; }
     .mesh-table-wrap { width: 100%; max-height: 440px; overflow: auto; border: 1px solid #e0e6e8; border-top: 0; }
     .mesh-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     #mesh-permission-table .mesh-table { min-width: 720px; }
@@ -289,6 +306,7 @@
     .mesh-table tbody tr:hover { background: #f8fbfa; }
     .mesh-table tr:last-child td { border-bottom: 0; }
     .mesh-code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+    .mesh-table td.mesh-value-compact { overflow-wrap: normal; white-space: nowrap; }
     .mesh-empty { padding: 32px 16px; color: #6b797f; text-align: center; font-size: 13px; }
     .mesh-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #e0e6e8; border-top: 0; padding: 8px 12px; color: #68777d; font-size: 12px; }
     .mesh-pagination-actions { display: flex; align-items: center; gap: 6px; }
@@ -578,6 +596,7 @@
   }
 
   function renderLogin(message = '') {
+    resetNodeHealth();
     state.view = 'overview';
     state.queryDraft = defaultQuery;
     state.queryResult = null;
@@ -748,6 +767,7 @@
     if (view === 'users' && !state.capabilities.canViewAccess) return;
     if (view === 'manage' && !canAccessManage()) return;
     state.view = view;
+    if (view !== 'overview') stopNodeHealthPolling();
     setActiveView(view);
     if (view === 'overview') await loadOverview();
     if (view === 'tables') await loadTables();
@@ -799,7 +819,8 @@
     const head = columnNames.map((name) => `<th scope="col">${htmlEscape(name)}</th>`).join('');
     const body = visibleRows.map((row) => `<tr>${columnNames.map((name) => {
       const value = valueText(row[name]);
-      return `<td class="mesh-code" title="${htmlEscape(value)}">${htmlEscape(value)}</td>`;
+      const compact = value.length <= 12 && !/\s/.test(value) ? ' mesh-value-compact' : '';
+      return `<td class="mesh-code${compact}" title="${htmlEscape(value)}">${htmlEscape(value)}</td>`;
     }).join('')}</tr>`).join('');
     const end = Math.min(rows.length, start + visibleRows.length);
     const pagination = pageCount > 1 || options.showPageSize ? `
@@ -827,13 +848,126 @@
     if (pageSize && onPageSize) pageSize.addEventListener('change', () => onPageSize(Number(pageSize.value)));
   }
 
+  function nodeHealthStatus(code) {
+    return ({ 0: 'Unknown', 1: 'Dead', 2: 'Unavailable', 3: 'Live', 4: 'Decommissioning', 5: 'Decommissioned', 6: 'Draining' })[code] || 'Unknown';
+  }
+
+  function parseNodeHealth(rows, configured) {
+    if (!Number.isSafeInteger(configured) || configured < 1 || !Array.isArray(rows)) throw new Error('Invalid node health response.');
+    const seen = new Set();
+    const nodes = rows.map((row) => {
+      const id = Number(row && row.node_id);
+      const status = Number(row && row.liveness_status);
+      if (!Number.isSafeInteger(id) || id < 1 || seen.has(id) || !Number.isInteger(status)) throw new Error('Invalid node health response.');
+      seen.add(id);
+      const updatedAt = Number(row.updated_at);
+      return { id, status, updatedAt: Number.isFinite(updatedAt) && updatedAt > 0 ? updatedAt : 0 };
+    }).sort((a, b) => a.id - b.id);
+    return { configured, observed: nodes.length, live: nodes.filter((node) => node.status === 3).length, nodes };
+  }
+
+  function nodeHealthSection() {
+    return `<section class="mesh-panel" aria-labelledby="mesh-node-health-title">
+      <div class="mesh-panel-head"><h2 id="mesh-node-health-title">Node liveness</h2></div>
+      <div id="mesh-node-health" aria-live="polite"></div>
+    </section>`;
+  }
+
+  function renderNodeHealth() {
+    const container = document.getElementById('mesh-node-health');
+    if (!container || state.view !== 'overview' || !state.session) return;
+    const health = state.nodeHealth;
+    const stale = !health.lastSuccessAt || Date.now() - health.lastSuccessAt >= 120000;
+    const snapshot = health.snapshot;
+    const checked = health.lastSuccessAt ? new Date(health.lastSuccessAt).toLocaleString() : 'Never';
+    const summary = snapshot ? `<div class="mesh-node-summary">
+      <span>Configured target <strong>${snapshot.configured}</strong></span>
+      <span>Known node records <strong>${snapshot.observed}</strong></span>
+      <span>Live <strong>${snapshot.live}</strong></span>
+    </div>` : '<div class="mesh-node-summary">Configured target, known node records and live: Unable to assess</div>';
+    const rows = snapshot && snapshot.nodes.length ? `<div class="mesh-table-wrap"><table class="mesh-table">
+      <thead><tr><th scope="col">DB node ID</th><th scope="col">Liveness</th><th scope="col">Last status report</th></tr></thead>
+      <tbody>${snapshot.nodes.map((node) => `<tr><td class="mesh-code">${node.id}</td><td>${nodeHealthStatus(node.status)}</td><td>${node.updatedAt ? htmlEscape(new Date(node.updatedAt / 1e6).toLocaleString()) : 'Unavailable'}</td></tr>`).join('')}</tbody>
+    </table></div>` : '<div class="mesh-empty">No node status reports observed.</div>';
+    container.innerHTML = `<div class="mesh-node-meta ${stale ? 'stale' : ''}">${stale ? 'Stale | ' : ''}Last successful check: ${htmlEscape(checked)}${health.loading ? ' | Checking...' : ''}${health.error ? ' | Unable to refresh' : ''}</div>
+      ${summary}${snapshot ? rows : `<div class="mesh-empty">${health.loading ? 'Checking node liveness...' : 'Unable to assess node liveness for this account or deployment.'}</div>`}
+      <div class="mesh-node-meta">Range availability and under-replication: Unable to assess.</div>
+      <button class="mesh-button secondary" id="mesh-refresh-node-health" type="button" ${health.loading ? 'disabled' : ''}>Refresh node liveness</button>`;
+    document.getElementById('mesh-refresh-node-health').addEventListener('click', () => { void refreshNodeHealth(); });
+  }
+
+  async function refreshNodeHealth() {
+    if (!state.session || state.view !== 'overview' || document.hidden) return;
+    if (state.nodeHealth.inFlight) return state.nodeHealth.inFlight;
+    const health = state.nodeHealth;
+    const generation = health.generation;
+    health.loading = true;
+    renderNodeHealth();
+    const pending = (async () => {
+      try {
+        const [config, nodes] = await Promise.all([
+          request('/api/v2/r1db/node-config/'),
+          fetchPaged('/api/v2/nodes/', 'nodes'),
+        ]);
+        const snapshot = parseNodeHealth(nodes, Number(config && config.configured_node_count));
+        if (health.generation !== generation || !state.session) return;
+        health.snapshot = snapshot;
+        health.lastSuccessAt = Date.now();
+        health.error = '';
+      } catch (error) {
+        if (health.generation !== generation || !state.session) return;
+        health.error = readableError(error);
+      } finally {
+        if (health.generation === generation) {
+          health.loading = false;
+          health.inFlight = null;
+          renderNodeHealth();
+        }
+      }
+    })();
+    health.inFlight = pending;
+    return pending;
+  }
+
+  function stopNodeHealthPolling() {
+    if (state.nodeHealth.timer !== null) clearInterval(state.nodeHealth.timer);
+    state.nodeHealth.timer = null;
+  }
+
+  function startNodeHealthPolling() {
+    stopNodeHealthPolling();
+    if (!state.session || state.view !== 'overview' || document.hidden) return;
+    state.nodeHealth.timer = setInterval(() => {
+      renderNodeHealth();
+      void refreshNodeHealth();
+    }, 60000);
+  }
+
+  function resetNodeHealth() {
+    stopNodeHealthPolling();
+    state.nodeHealth = { snapshot: null, lastSuccessAt: 0, loading: false, error: '', inFlight: null,
+      timer: null, generation: state.nodeHealth.generation + 1 };
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) stopNodeHealthPolling();
+    else if (state.session && state.view === 'overview') {
+      startNodeHealthPolling();
+      renderNodeHealth();
+      void refreshNodeHealth();
+    }
+  });
+
   async function loadOverview() {
     const page = document.getElementById('mesh-page');
     if (!page) return;
     const requestState = databaseRequestState();
     setActiveView('overview');
-    page.innerHTML = pageHeader('Overview', state.database, '<button class="mesh-button secondary" id="mesh-refresh" type="button">Refresh</button>') + loadingPanel('Loading cluster data...');
+    page.innerHTML = pageHeader('Overview', state.database, '<button class="mesh-button secondary" id="mesh-refresh" type="button">Refresh</button>') + nodeHealthSection() + loadingPanel('Loading cluster data...');
     document.getElementById('mesh-refresh').addEventListener('click', loadOverview);
+    renderNodeHealth();
+    startNodeHealthPolling();
+    void refreshNodeHealth();
     try {
       const [identity, tables, health, imageVersionResponse, recentTables] = await Promise.all([
         executeSql('SELECT current_user AS username, current_database() AS database_name, version() AS engine_version'),
@@ -866,6 +1000,7 @@
           <div class="mesh-stat"><div class="mesh-stat-label">Tables</div><div class="mesh-stat-value">${htmlEscape(valueText(tableRow.table_count || 0))}</div></div>
           <div class="mesh-stat"><div class="mesh-stat-label">Image</div><div class="mesh-stat-value mesh-code">${htmlEscape(imageVersion === 'Unavailable' ? imageVersion : `v${imageVersion}`)}</div></div>
         </div>
+        ${nodeHealthSection()}
         ${recentTables ? `<section class="mesh-panel">
           <div class="mesh-panel-head"><h2>Tables</h2><button class="mesh-button secondary" id="mesh-open-tables" type="button">View all</button></div>
           ${renderDataTable(recentTables, 'No user tables found in this database.', { pageSize: 6 })}
@@ -876,11 +1011,13 @@
         </section>
       `;
       void health;
+      renderNodeHealth();
       document.getElementById('mesh-refresh').addEventListener('click', loadOverview);
       document.getElementById('mesh-open-tables')?.addEventListener('click', () => { void selectView('tables'); });
     } catch (error) {
       if (!state.session || !isCurrentDatabase(requestState) || state.view !== 'overview') return;
-      page.innerHTML = pageHeader('Overview', state.database, '<button class="mesh-button secondary" id="mesh-refresh" type="button">Retry</button>') + `<div class="mesh-error">${htmlEscape(readableError(error))}</div>`;
+      page.innerHTML = pageHeader('Overview', state.database, '<button class="mesh-button secondary" id="mesh-refresh" type="button">Retry</button>') + nodeHealthSection() + `<div class="mesh-error">${htmlEscape(readableError(error))}</div>`;
+      renderNodeHealth();
       document.getElementById('mesh-refresh').addEventListener('click', loadOverview);
     }
   }
@@ -1895,6 +2032,7 @@
       document.getElementById('mesh-result-meta').textContent = `${result.tag || 'SQL'} / ${resultRows(result).length} rows / ${elapsed.toFixed(0)} ms / ${result.retries} retries`;
       meta.textContent = 'Completed';
       panel.hidden = false;
+      void loadDatabaseOptions();
     } catch (error) {
       if (!state.session || !isCurrentDatabase(requestState) || state.view !== 'sql') return;
       errorBox.textContent = readableError(error);
@@ -1928,6 +2066,9 @@
     renderShell();
     loadOverview();
   } else {
-    renderLogin();
+    const handoffError = new URLSearchParams(location.search).get('console_login');
+    if (handoffError) history.replaceState(null, '', location.pathname);
+    renderLogin(handoffError === 'failed' ? 'The job credentials could not sign in. Check the database user and password.' :
+      handoffError === 'storage' ? 'This browser could not save the console session. Sign in manually.' : '');
   }
 })();

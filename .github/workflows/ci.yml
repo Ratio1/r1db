@@ -37,6 +37,9 @@ jobs:
       - name: Verify Ratio1 overrides against exact upstream source
         run: scripts/verify-upstream-provenance.sh
 
+      - name: Verify browser console behavior
+        run: node --test scripts/test-console-*.cjs
+
       - name: Prepare pristine source snapshot
         run: |
           mkdir source-snapshot

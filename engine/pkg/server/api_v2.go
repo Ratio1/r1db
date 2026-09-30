@@ -188,6 +188,7 @@ func registerRoutes(
 	}{
 		// Pass through auth-related endpoints to the auth server.
 		{"login/", a.authServer.ServeHTTP, false /* requiresAuth */, regularRole, noOption, false},
+		{"console-login/", a.authServer.ServeHTTP, false /* requiresAuth */, regularRole, noOption, false},
 		{"logout/", a.authServer.ServeHTTP, false /* requiresAuth */, regularRole, noOption, false},
 
 		// Directly register other endpoints in the api server.
@@ -206,14 +207,15 @@ func registerRoutes(
 		{"databases/{database_name:[\\w.]+}/grants/", a.databaseGrants, true, regularRole, noOption, false},
 		{"databases/{database_name:[\\w.]+}/tables/", a.databaseTables, true, regularRole, noOption, false},
 		{"databases/{database_name:[\\w.]+}/tables/{table_name:[\\w.]+}/", a.tableDetails, true, regularRole, noOption, false},
-		{"r1db/version/", a.meshdbVersion, true, regularRole, noOption, true},
-		{"r1db/capabilities/", a.meshdbCapabilities, true, regularRole, noOption, true},
-		{"r1db/databases/", a.meshdbDatabases, true, regularRole, noOption, true},
-		{"r1db/database-tables/", a.meshdbListDatabaseTables, true, regularRole, noOption, true},
-		{"r1db/tables/", a.meshdbCreateTable, true, regularRole, noOption, true},
-		{"r1db/users/", a.meshdbUsers, true, adminRole, noOption, true},
-		{"r1db/access/", a.meshdbAccess, true, adminRole, noOption, true},
-		{"r1db/permissions/", a.meshdbPermissions, true, adminRole, noOption, true},
+		{"r1db/version/", a.r1dbVersion, true, regularRole, noOption, true},
+		{"r1db/node-config/", a.r1dbNodeConfig, true, adminRole, noOption, true},
+		{"r1db/capabilities/", a.r1dbCapabilities, true, regularRole, noOption, true},
+		{"r1db/databases/", a.r1dbDatabases, true, regularRole, noOption, true},
+		{"r1db/database-tables/", a.r1dbListDatabaseTables, true, regularRole, noOption, true},
+		{"r1db/tables/", a.r1dbCreateTable, true, regularRole, noOption, true},
+		{"r1db/users/", a.r1dbUsers, true, adminRole, noOption, true},
+		{"r1db/access/", a.r1dbAccess, true, adminRole, noOption, true},
+		{"r1db/permissions/", a.r1dbPermissions, true, adminRole, noOption, true},
 		{"rules/", a.listRules, false, regularRole, noOption, true},
 
 		{"sql/", a.execSQL, true, regularRole, noOption, true},

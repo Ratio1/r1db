@@ -5,7 +5,7 @@ engine_root="${ENGINE_ROOT:-/workspace/engine}"
 build_root="${BUILD_ROOT:-/build}"
 output_root="${OUTPUT_ROOT:-/out}"
 repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-meshdb_version_file="${R1DB_VERSION_FILE:-${repository_root}/VERSION}"
+r1db_version_file="${R1DB_VERSION_FILE:-${repository_root}/VERSION}"
 source_date_epoch="${SOURCE_DATE_EPOCH:-1727820937}"
 ratio1_version="${RATIO1_VERSION:-}"
 upstream_revision="76e598c9b1c100fd9280b979140b5e377c330a20"
@@ -17,21 +17,21 @@ export LC_ALL=C
 export SOURCE_DATE_EPOCH="${source_date_epoch}"
 export TZ=UTC
 
-if [[ ! -f "${meshdb_version_file}" ]]; then
-  printf 'R1DB version file does not exist: %s\n' "${meshdb_version_file}" >&2
+if [[ ! -f "${r1db_version_file}" ]]; then
+  printf 'R1DB version file does not exist: %s\n' "${r1db_version_file}" >&2
   exit 1
 fi
-meshdb_version="$(<"${meshdb_version_file}")"
-if [[ ! "${meshdb_version}" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-  printf 'R1DB VERSION must use canonical MAJOR.MINOR.PATCH: %s\n' "${meshdb_version}" >&2
+r1db_version="$(<"${r1db_version_file}")"
+if [[ ! "${r1db_version}" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+  printf 'R1DB VERSION must use canonical MAJOR.MINOR.PATCH: %s\n' "${r1db_version}" >&2
   exit 1
 fi
-ratio1_version="${ratio1_version:-v${meshdb_version}}"
+ratio1_version="${ratio1_version:-v${r1db_version}}"
 
 if [[ ! "${ratio1_version}" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ||
-      ( "${ratio1_version}" != "v${meshdb_version}" && "${ratio1_version}" != "v${meshdb_version}-"* ) ]]; then
+      ( "${ratio1_version}" != "v${r1db_version}" && "${ratio1_version}" != "v${r1db_version}-"* ) ]]; then
   printf 'RATIO1_VERSION must match VERSION as v%s with an optional prerelease: %s\n' \
-    "${meshdb_version}" "${ratio1_version}" >&2
+    "${r1db_version}" "${ratio1_version}" >&2
   exit 1
 fi
 
@@ -43,7 +43,7 @@ case "${parallelism}" in
 esac
 
 mkdir -p "${native_root}" "${source_root}" "${output_root}/lib"
-printf '%s\n' "${meshdb_version}" > "${output_root}/R1DB_VERSION"
+printf '%s\n' "${r1db_version}" > "${output_root}/R1DB_VERSION"
 cp -a "${engine_root}/c-deps/jemalloc" "${source_root}/jemalloc"
 cp -a "${engine_root}/c-deps/libedit" "${source_root}/libedit"
 

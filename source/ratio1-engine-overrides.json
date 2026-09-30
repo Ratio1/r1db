@@ -124,9 +124,16 @@
     {
       "path": "engine/pkg/server/api_v2.go",
       "upstreamSha256": "abdd01ce3e5d7b705549865273fdc8e54d6f0c484153001aad2c4181677161b6",
-      "distributedSha256": "29d904881e80a415f8c95e1790584bcf81c9be31753b35c0e5a4a45d0698a8a2",
+      "distributedSha256": "336e3768134a9e2a92696e10633b794c8c458f402933d778d547c11b97cb694a",
       "changeClass": "browser-console-management",
       "reason": "Register authenticated R1DB console management routes with explicit regular-user and admin role requirements."
+    },
+    {
+      "path": "engine/pkg/server/api_v2_auth.go",
+      "upstreamSha256": "8f2b926adf1851b84a5b9983cbc10a1dbaa45f11335d62459e6c1205920883a2",
+      "distributedSha256": "909be2d105f0f1b8f37a3341bd5a43a187b0ba579613777f5c00e1c4b28905d4",
+      "changeClass": "browser-console-management",
+      "reason": "Authenticate Deeploy console handoff credentials and establish the existing API session on the dashboard origin without placing secrets in URLs."
     },
     {
       "path": "engine/pkg/server/api_v2_error.go",
@@ -251,8 +258,8 @@
   "ratio1AddedFiles": [
     {
       "path": "engine/pkg/server/api_v2_r1db.go",
-      "sha256": "94e984a4f56a660be8c1c00fcfad5508b3ea52252ec55fe7771d6299b7a4e91e",
-      "reason": "Authenticated, allowlisted management and admin-only user-permission endpoints for filtered database discovery, private database creation, safe tables, creating and deleting users, inspecting direct, role, and public grants across database contexts, and atomically granting or revoking focused database/table access without exposing arbitrary DDL or privilege SQL through the browser."
+      "sha256": "9701a7fc06bb18b2e165a9578b6e3a2c0f6e7e9e747b394e19326e382a3f6d2d",
+      "reason": "Authenticated, allowlisted management and admin-only user-permission endpoints for filtered database discovery, private database creation, safe tables, creating and deleting users, inspecting direct, role, and public grants across database contexts, atomically granting or revoking focused database/table access, and reporting the configured node target without exposing arbitrary DDL or privilege SQL through the browser."
     },
     {
       "path": "engine/pkg/storage/pebble_iterator_r1_test.go",
@@ -261,8 +268,8 @@
     },
     {
       "path": "engine/pkg/ui/distoss/assets/bundle.js",
-      "sha256": "9a11065638e3962c7de5ac9f0ce6c7b7b8f20d248a0696ee7d681500da683384",
-      "reason": "Dependency-free first-party browser console with table inventory, on-demand table creation, scrollable paginated SQL results, CONNECT-filtered database switching, tabbed database/user/access management, and responsive controls. It normalizes the v2 user-object response, retains SQL drafts on navigation, fixes compact layout spacing, and communicates local health and list bounds accurately."
+      "sha256": "396b534f2d1775bfaf7ab74c84d3f1ba49cd51dc1e37cd99661aa088682e4894",
+      "reason": "Dependency-free first-party browser console with a same-origin login handoff, observed node-liveness overview, table inventory, on-demand table creation, scrollable paginated SQL results, CONNECT-filtered database switching, tabbed database/user/access management, and responsive controls. It normalizes the v2 user-object response, retains SQL drafts on navigation, fixes compact layout spacing, and communicates local health and list bounds accurately."
     },
     {
       "path": "engine/pkg/ui/distoss/assets/favicon.svg",
