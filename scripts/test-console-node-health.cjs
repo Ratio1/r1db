@@ -28,14 +28,14 @@ function consoleHarness(fetchResponse = async () => { throw new Error('unexpecte
     hidden: false,
     head: { appendChild() {} },
     createElement: () => ({ textContent: '' }),
-    getElementById: element,
+    getElementById: (id) => id === 'r1db-console-handoff' ? null : element(id),
     querySelectorAll: () => [],
     querySelector: () => null,
     addEventListener: (name, callback) => listeners.set(name, callback),
   };
   const context = {
     document, sessionStorage: { getItem: () => null, removeItem() {}, setItem() {} },
-    fetch: fetchResponse, Headers, URLSearchParams, Date,
+    fetch: fetchResponse, Headers, URLSearchParams, Date, location: { search: '' },
     setInterval: (callback, delay) => { const id = nextInterval++; intervals.set(id, { callback, delay }); return id; },
     clearInterval: (id) => intervals.delete(id),
   };
@@ -53,7 +53,6 @@ test('counts only observed IDs and live liveness, without synthetic rows', () =>
   assert.equal(snapshot.configured, 4);
   assert.equal(snapshot.observed, 2);
   assert.equal(snapshot.live, 1);
-  assert.equal(snapshot.notObserved, 2);
   assert.deepEqual(Array.from(snapshot.nodes, (node) => node.id), [8, 12]);
 });
 
@@ -74,7 +73,8 @@ test('renders a stale snapshot and never invents a Ratio1 address or range zero'
   harness.renderNodeHealth();
   const html = harness.element('mesh-node-health').innerHTML;
   assert.match(html, /Stale/);
-  assert.match(html, /Not observed/);
+  assert.match(html, /Known node records/);
+  assert.doesNotMatch(html, /Not observed/);
   assert.match(html, /Unable to assess/);
   assert.match(html, /DB node ID/);
   assert.doesNotMatch(html, /Ratio1 address|roach7/);
@@ -107,7 +107,6 @@ test('loads configured count and paginated observed nodes, then refreshes on tab
   harness.state.session = 'session';
   await harness.refreshNodeHealth();
   assert.equal(harness.state.nodeHealth.snapshot.observed, 2);
-  assert.equal(harness.state.nodeHealth.snapshot.notObserved, 1);
   assert.match(harness.element('mesh-node-health').innerHTML, /DB node ID/);
   assert.match(harness.element('mesh-node-health').innerHTML, /Dead/);
   assert.equal(calls.length, 3);

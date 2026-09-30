@@ -361,6 +361,61 @@ PY
     exit 1
   fi
 
+  handoff_status="$(curl "${curl_args[@]}" --dump-header "${tmp}/console-handoff.headers" \
+    --output "${tmp}/console-handoff.html" --write-out '%{http_code}' \
+    --header 'Origin: https://deeploy.ratio1.ai' \
+    --header 'Content-Type: application/x-www-form-urlencoded' \
+    --data 'username=app_user&password=app_secret_123&database=appdb' \
+    "${base_url}/api/v2/console-login/")"
+  if [[ "${handoff_status}" != "200" ]] || \
+      ! grep -Fq 'id="r1db-console-handoff"' "${tmp}/console-handoff.html" || \
+      ! grep -Fiq 'Cache-Control: no-store' "${tmp}/console-handoff.headers" || \
+      grep -Fq 'app_secret_123' "${tmp}/console-handoff.html"; then
+    echo "console handoff did not establish a non-cached session page" >&2
+    exit 1
+  fi
+
+  rejected_handoff_status="$(curl "${curl_args[@]}" --dump-header "${tmp}/console-handoff-rejected.headers" \
+    --output /dev/null --write-out '%{http_code}' \
+    --header 'Origin: https://deeploy.ratio1.ai' \
+    --header 'Content-Type: application/x-www-form-urlencoded' \
+    --data 'username=app_user&password=wrong&database=appdb' \
+    "${base_url}/api/v2/console-login/")"
+  if [[ "${rejected_handoff_status}" != "303" ]] || \
+      ! grep -Fiq 'Location: /?console_login=failed' "${tmp}/console-handoff-rejected.headers"; then
+    echo "console handoff did not reject invalid credentials" >&2
+    exit 1
+  fi
+
+  blocked_origin_status="$(curl "${curl_args[@]}" --output /dev/null --write-out '%{http_code}' \
+    --header 'Origin: https://untrusted.example' \
+    --header 'Content-Type: application/x-www-form-urlencoded' \
+    --data 'username=app_user&password=app_secret_123&database=appdb' \
+    "${base_url}/api/v2/console-login/")"
+  if [[ "${blocked_origin_status}" != "403" ]]; then
+    echo "console handoff accepted an untrusted origin" >&2
+    exit 1
+  fi
+
+  anonymous_node_config_status="$(curl "${curl_args[@]}" --output /dev/null \
+    --write-out '%{http_code}' "${base_url}/api/v2/r1db/node-config/")"
+  node_config_status="$(printf 'header = "X-Cockroach-API-Session: %s"\n' "${session}" | \
+    curl --config - "${curl_args[@]}" --output "${tmp}/console-node-config.json" \
+      --write-out '%{http_code}' "${base_url}/api/v2/r1db/node-config/")"
+  if [[ "${anonymous_node_config_status}" != "401" || "${node_config_status}" != "200" ]] || \
+      ! python3 - "${tmp}/console-node-config.json" <<'PY'
+import json
+import pathlib
+import sys
+
+value = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+raise SystemExit(0 if value == {"configured_node_count": 1} else 1)
+PY
+  then
+    echo "console node configuration endpoint has an invalid contract" >&2
+    exit 1
+  fi
+
   sql_status="$(printf 'header = "X-Cockroach-API-Session: %s"\n' "${session}" | \
     curl --config - "${curl_args[@]}" --output "${sql_file}" \
       --write-out '%{http_code}' --header 'Content-Type: application/json' \

@@ -861,8 +861,7 @@
       const updatedAt = Number(row.updated_at);
       return { id, status, updatedAt: Number.isFinite(updatedAt) && updatedAt > 0 ? updatedAt : 0 };
     }).sort((a, b) => a.id - b.id);
-    return { configured, observed: nodes.length, live: nodes.filter((node) => node.status === 3).length,
-      notObserved: Math.max(0, configured - nodes.length), nodes };
+    return { configured, observed: nodes.length, live: nodes.filter((node) => node.status === 3).length, nodes };
   }
 
   function nodeHealthSection() {
@@ -881,10 +880,9 @@
     const checked = health.lastSuccessAt ? new Date(health.lastSuccessAt).toLocaleString() : 'Never';
     const summary = snapshot ? `<div class="mesh-node-summary">
       <span>Configured target <strong>${snapshot.configured}</strong></span>
-      <span>Observed <strong>${snapshot.observed}</strong></span>
+      <span>Known node records <strong>${snapshot.observed}</strong></span>
       <span>Live <strong>${snapshot.live}</strong></span>
-      <span>Not observed <strong>${snapshot.notObserved}</strong></span>
-    </div>` : '<div class="mesh-node-summary">Configured target, observed and live: Unable to assess</div>';
+    </div>` : '<div class="mesh-node-summary">Configured target, known node records and live: Unable to assess</div>';
     const rows = snapshot && snapshot.nodes.length ? `<div class="mesh-table-wrap"><table class="mesh-table">
       <thead><tr><th scope="col">DB node ID</th><th scope="col">Liveness</th><th scope="col">Last status report</th></tr></thead>
       <tbody>${snapshot.nodes.map((node) => `<tr><td class="mesh-code">${node.id}</td><td>${nodeHealthStatus(node.status)}</td><td>${node.updatedAt ? htmlEscape(new Date(node.updatedAt / 1e6).toLocaleString()) : 'Unavailable'}</td></tr>`).join('')}</tbody>

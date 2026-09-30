@@ -39,6 +39,17 @@ membership during bootstrap on both new and existing clusters. This aligns
 the practical default dashboard login with its admin-only management controls;
 the configured password must be protected as an administrator credential.
 
+R1DB v1.0.9 adds a Deeploy-to-console login handoff in the retained upstream
+`engine/pkg/server/api_v2_auth.go`, registered by `engine/pkg/server/api_v2.go`.
+It checks the Deeploy request origin, verifies the configured database credentials,
+creates the normal API session,
+and returns a no-store page that initializes the console session on the R1DB
+origin without placing credentials in a URL. The first-party console now shows
+an admin-only node-liveness table using the existing nodes API and a configured
+target endpoint in `engine/pkg/server/api_v2_r1db.go`. The table distinguishes
+known node records from the deployment target and marks old observations stale;
+it does not present node liveness as range quorum or SQL availability.
+
 The release also includes reviewed `not_affected` OpenVEX decisions for
 util-linux findings. The minimal scratch runtime retains only non-setuid
 `setsid` from v2.38.1 and contains no `mount`, `umount`, `nsenter`, `libmount`,

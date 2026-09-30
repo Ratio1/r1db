@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// Modified by Ratio1 in 2026; see RATIO1_PATCHES.md.
+
 package server
 
 import (
@@ -15,6 +17,7 @@ import (
 	"encoding/base64"
 	"html"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -201,6 +204,22 @@ func (a *authenticationV2Server) consoleLogin(w http.ResponseWriter, r *http.Req
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; base-uri 'none'; frame-ancestors 'none'")
 	if r.Method != http.MethodPost {
 		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	origin := r.Header.Get("Origin")
+	allowedOrigins := os.Getenv("CRDB_CONSOLE_LOGIN_ORIGINS")
+	if allowedOrigins == "" {
+		allowedOrigins = "https://deeploy.ratio1.ai,https://devnet-deeploy.ratio1.ai,https://testnet-deeploy.ratio1.ai"
+	}
+	allowed := false
+	for _, candidate := range strings.Split(allowedOrigins, ",") {
+		if origin != "" && origin == strings.TrimSpace(candidate) {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		http.Error(w, "console handoff origin is not allowed", http.StatusForbidden)
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 8192)

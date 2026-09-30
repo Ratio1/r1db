@@ -1,4 +1,4 @@
-# R1DB v1.0.7
+# R1DB v1.0.9
 
 R1DB is an independently maintained Ratio1 distribution of a
 source-derived OSS runtime closure from CockroachDB v23.1.28. It packages the
@@ -11,7 +11,7 @@ copyright notices are retained under `engine/`.
 
 ## Version
 
-The current R1DB product version is `1.0.7`. [`VERSION`](VERSION) is the
+The current R1DB product version is `1.0.9`. [`VERSION`](VERSION) is the
 single source of truth: the build validates it, installs it in the image at
 `/usr/share/r1db/VERSION`, and records it in generated SPDX and CycloneDX
 SBOM application metadata. A merged `VERSION` change automatically starts the
@@ -55,13 +55,34 @@ adds a scrollable table with client-side page sizes of 25, 50, or 100 rows.
 Overview shows a short table inventory. Tables opens with the object list and
 offers table creation on demand. Manage separates database, user, and access
 tasks into tabs; database grants use explicit multi-selection controls.
+Overview also shows known database-node records and live-node liveness alongside
+the configured `CRDB_NODE_COUNT` target. Historical node IDs may remain after
+replacement. It refreshes while visible, marks old snapshots stale,
+and does not equate node liveness with SQL availability or range quorum.
+
+Deeploy can open the console already signed in for an authorized job operator.
+It submits the configured database, username, and password by HTTPS form POST
+to `POST /api/v2/console-login/` at the verified job dashboard tunnel. The
+endpoint creates the same API session as `/api/v2/login/`, returns a no-store
+same-origin handoff page, and never puts credentials in a redirect URL. Invalid
+credentials return to the regular sign-in page. Deeploy must require its
+`viewSecrets` permission and verify the job's HTTP tunnel before sending them.
+The handoff accepts browser POSTs from the mainnet, devnet, and testnet Deeploy
+origins by default. Set `CRDB_CONSOLE_LOGIN_ORIGINS` to a comma-separated list
+of exact origins for a self-hosted Deeploy deployment; an absent or unlisted
+`Origin` is rejected.
 
 The console uses these authenticated, same-origin endpoints. The management
 endpoints cover operations that the generic SQL endpoint intentionally rejects:
 
 - `GET /api/v2/r1db/version/` returns
-  `{ "version": "1.0.7" }`, reading the installed R1DB image version
+  `{ "version": "1.0.9" }`, reading the installed R1DB image version
   from `/usr/share/r1db/VERSION`.
+- `GET /api/v2/r1db/node-config/` is admin-only and returns
+  `{ "configured_node_count": 3 }` from `CRDB_NODE_COUNT`, or 503 if that
+  target is unavailable. It is a deployment target, not a live allocation or
+  database quorum count. The Overview combines it with the existing admin-only
+  `/api/v2/nodes/` liveness response.
 - `GET /api/v2/r1db/capabilities/` reports whether the session can view
   access administration or create databases.
 - `GET /api/v2/r1db/databases/` lists databases where the session has
@@ -165,7 +186,7 @@ Repository and package promotion controls are documented in
 ```bash
 scripts/verify-image.sh \
   ghcr.io/ratio1/r1db@sha256:<digest> \
-  v1.0.7
+  v1.0.9
 ```
 
 ## Support
@@ -186,7 +207,7 @@ and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Citation
 
-The R1DB entry below cites this source snapshot. Its immutable `v1.0.7`
+The R1DB entry below cites this source snapshot. Its immutable `v1.0.9`
 tag will make the citation reproducible once the release is published.
 
 ```bibtex
@@ -199,10 +220,10 @@ tag will make the citation reproducible once the release is published.
   note    = {Tag v23.1.28; commit 76e598c9b1c100fd9280b979140b5e377c330a20}
 }
 
-@software{ratio1_meshdb_1_0_6,
+@software{ratio1_r1db_1_0_9,
   author  = {{Ratio1}},
   title   = {{R1DB}},
-  version = {1.0.7},
+  version = {1.0.9},
   url     = {https://github.com/Ratio1/r1db},
   note    = {Source-derived Ratio1 distribution based on CockroachDB v23.1.28}
 }
