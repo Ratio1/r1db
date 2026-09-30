@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -89,6 +90,10 @@ type meshDBCapabilitiesResponse struct {
 
 type meshDBVersionResponse struct {
 	Version string `json:"version"`
+}
+
+type meshDBNodeConfigResponse struct {
+	ConfiguredNodeCount int `json:"configured_node_count"`
 }
 
 type meshDBDatabasesResponse struct {
@@ -451,6 +456,21 @@ func (a *apiV2Server) meshdbVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSONResponse(ctx, w, http.StatusOK, meshDBVersionResponse{Version: version})
+}
+
+// GET /api/v2/r1db/node-config/ is admin-only and returns the configured
+// deployment target as {"configured_node_count": N}; an unset/invalid target
+// returns 503. CRDB_NODE_ID is not a database node ID.
+func (a *apiV2Server) meshdbNodeConfig(w http.ResponseWriter, r *http.Request) {
+	if !meshDBMethod(w, r, http.MethodGet) {
+		return
+	}
+	count, err := strconv.Atoi(strings.TrimSpace(os.Getenv("CRDB_NODE_COUNT")))
+	if err != nil || count < 1 {
+		http.Error(w, "configured node count is unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	writeJSONResponse(r.Context(), w, http.StatusOK, meshDBNodeConfigResponse{ConfiguredNodeCount: count})
 }
 
 func (a *apiV2Server) meshdbUsers(w http.ResponseWriter, r *http.Request) {
