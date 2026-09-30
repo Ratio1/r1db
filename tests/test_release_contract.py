@@ -108,8 +108,8 @@ class ReleaseContractTests(unittest.TestCase):
       'can_view_access',
       'json:"databases,omitempty"',
       'json:"version"',
-      'meshDBVersionPath',
-      'os.ReadFile(meshDBVersionPath)',
+      'r1dbVersionPath',
+      'os.ReadFile(r1dbVersionPath)',
     ):
       self.assertIn(marker, api)
     for marker in (
@@ -129,8 +129,8 @@ class ReleaseContractTests(unittest.TestCase):
     api = read("engine/pkg/server/api_v2_r1db.go")
     routes = read("engine/pkg/server/api_v2.go")
     bundle = read("engine/pkg/ui/distoss/assets/bundle.js")
-    create = api.split("func (a *apiV2Server) meshdbCreateDatabase", 1)[1].split(
-      "func (a *apiV2Server) meshdbCreateTable", 1
+    create = api.split("func (a *apiV2Server) r1dbCreateDatabase", 1)[1].split(
+      "func (a *apiV2Server) r1dbCreateTable", 1
     )[0]
     self.assertIn("internalDB.Txn", create)
     self.assertIn("REVOKE CONNECT ON DATABASE", create)
@@ -138,16 +138,16 @@ class ReleaseContractTests(unittest.TestCase):
     self.assertIn("GRANT CREATE ON SCHEMA", create)
     self.assertIn("quotedActor", create)
     self.assertIn("user: username.RootUserName()", create)
-    self.assertIn('"r1db/database-tables/", a.meshdbListDatabaseTables, true, regularRole', routes)
+    self.assertIn('"r1db/database-tables/", a.r1dbListDatabaseTables, true, regularRole', routes)
     self.assertIn("/api/v2/r1db/database-tables/?database=${encodeURIComponent(database)}", bundle)
     self.assertNotIn("/api/v2/databases/${encodeURIComponent(database)}/tables/", bundle)
 
-    permissions = api.split("func (a *apiV2Server) meshdbReadPermissions", 1)[1].split(
+    permissions = api.split("func (a *apiV2Server) r1dbReadPermissions", 1)[1].split(
       "func valueOrEmpty", 1
     )[0]
     self.assertIn("SHOW GRANTS FOR %s, public", permissions)
     self.assertIn("schema_name NOT IN", permissions)
-    access = api.split("func (a *apiV2Server) meshdbChangeAccess", 1)[1]
+    access = api.split("func (a *apiV2Server) r1dbChangeAccess", 1)[1]
     self.assertIn("GRANT CONNECT ON DATABASE %s TO %s", access)
     self.assertIn("CREATE ON SCHEMA %s.public %s %s", access)
 
@@ -516,15 +516,15 @@ func value() string {
   def test_git_does_not_normalize_manifested_source_bytes(self):
     self.assertIn("* -text", read(".gitattributes"))
 
-  def test_meshdb_version_is_valid_single_source_and_build_input(self):
+  def test_r1db_version_is_valid_single_source_and_build_input(self):
     version = read("VERSION").strip()
     self.assertRegex(version, r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
     self.assertEqual(read("VERSION"), f"{version}\n")
     build_script = read("scripts/build-engine.sh")
     self.assertIn("R1DB_VERSION_FILE", build_script)
     self.assertIn("R1DB_VERSION", build_script)
-    self.assertIn('ratio1_version="${ratio1_version:-v${meshdb_version}}"', build_script)
-    self.assertIn('"${ratio1_version}" != "v${meshdb_version}"', build_script)
+    self.assertIn('ratio1_version="${ratio1_version:-v${r1db_version}}"', build_script)
+    self.assertIn('"${ratio1_version}" != "v${r1db_version}"', build_script)
     self.assertIn(
       "COPY --from=engine-builder /out/R1DB_VERSION "
       "/usr/share/r1db/VERSION",
@@ -664,7 +664,7 @@ func value() string {
     self.assertIn('-f ref="refs/tags/$RELEASE_TAG"', create)
     self.assertIn('-f sha="$GITHUB_SHA"', create)
 
-  def test_engine_identity_support_and_telemetry_defaults_are_meshdb_owned(self):
+  def test_engine_identity_support_and_telemetry_defaults_are_r1db_owned(self):
     self.assertIn('return fmt.Sprintf("R1DB %s %s', read("engine/pkg/build/info.go"))
     self.assertIn('"Name":         "R1DB"', read("engine/pkg/sql/crdb_internal.go"))
     self.assertIn('semconv.ServiceNameKey.String("R1DB")', read("engine/pkg/util/tracing/tracer.go"))

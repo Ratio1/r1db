@@ -19461,7 +19461,7 @@
     {
       "basis": "BSL change license effective 2026-04-01; engine/licenses/BSL.txt",
       "path": "engine/pkg/server/api_v2.go",
-      "sha256": "051af7894e1f39564959dda791896ef3c3608ace8e61c95dd7d14ba05736caa3",
+      "sha256": "336e3768134a9e2a92696e10633b794c8c458f402933d778d547c11b97cb694a",
       "spdx": "Apache-2.0"
     },
     {
@@ -19479,7 +19479,7 @@
     {
       "basis": "Apache-2.0 source header",
       "path": "engine/pkg/server/api_v2_r1db.go",
-      "sha256": "08a9b89213446dd0b12f0d6aea9555de2cd72ede48e43abf55b6ea33eaa31f67",
+      "sha256": "9701a7fc06bb18b2e165a9578b6e3a2c0f6e7e9e747b394e19326e382a3f6d2d",
       "spdx": "Apache-2.0"
     },
     {

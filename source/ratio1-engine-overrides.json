@@ -124,7 +124,7 @@
     {
       "path": "engine/pkg/server/api_v2.go",
       "upstreamSha256": "abdd01ce3e5d7b705549865273fdc8e54d6f0c484153001aad2c4181677161b6",
-      "distributedSha256": "051af7894e1f39564959dda791896ef3c3608ace8e61c95dd7d14ba05736caa3",
+      "distributedSha256": "336e3768134a9e2a92696e10633b794c8c458f402933d778d547c11b97cb694a",
       "changeClass": "browser-console-management",
       "reason": "Register authenticated R1DB console management routes with explicit regular-user and admin role requirements."
     },
@@ -258,7 +258,7 @@
   "ratio1AddedFiles": [
     {
       "path": "engine/pkg/server/api_v2_r1db.go",
-      "sha256": "08a9b89213446dd0b12f0d6aea9555de2cd72ede48e43abf55b6ea33eaa31f67",
+      "sha256": "9701a7fc06bb18b2e165a9578b6e3a2c0f6e7e9e747b394e19326e382a3f6d2d",
       "reason": "Authenticated, allowlisted management and admin-only user-permission endpoints for filtered database discovery, private database creation, safe tables, creating and deleting users, inspecting direct, role, and public grants across database contexts, atomically granting or revoking focused database/table access, and reporting the configured node target without exposing arbitrary DDL or privilege SQL through the browser."
     },
     {

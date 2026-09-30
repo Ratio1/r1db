@@ -230,7 +230,7 @@ SQL
   rm -f "${negative_sql}"
 
   local secret_index=0
-  for secret_canary in app_secret_123 operator_child_secret meshdb_smoke_secret meshdb_reader_secret fake-token; do
+  for secret_canary in app_secret_123 operator_child_secret r1db_smoke_secret r1db_reader_secret fake-token; do
     secret_index=$((secret_index + 1))
     if docker_cmd logs "${name}" 2>&1 | grep -Fq "${secret_canary}"; then
       echo "secret canary ${secret_index} leaked into container logs" >&2
@@ -488,10 +488,10 @@ PY
     exit 1
   fi
 
-  printf '%s\n' "CREATE USER meshdb_smoke_admin WITH PASSWORD 'meshdb_smoke_secret'; GRANT admin TO meshdb_smoke_admin;" | \
+  printf '%s\n' "CREATE USER r1db_smoke_admin WITH PASSWORD 'r1db_smoke_secret'; GRANT admin TO r1db_smoke_admin;" | \
     docker_cmd exec -i "${name}" /cockroach/cockroach sql \
       --certs-dir=/cockroach/certs --host=roach1:26257 >/dev/null
-  admin_login_status="$(printf '%s' 'username=meshdb_smoke_admin&password=meshdb_smoke_secret' | \
+  admin_login_status="$(printf '%s' 'username=r1db_smoke_admin&password=r1db_smoke_secret' | \
     curl "${curl_args[@]}" --output "${tmp}/console-admin-login.json" \
     --write-out '%{http_code}' --header 'Content-Type: application/x-www-form-urlencoded' \
     --data-binary @- "${base_url}/api/v2/login/")"
@@ -504,7 +504,7 @@ PY
     echo "console admin session is missing" >&2
     exit 1
   fi
-  printf '%s' '{"username":"meshdb_smoke_reader","password":"meshdb_reader_secret"}' > "${tmp}/console-user-request.json"
+  printf '%s' '{"username":"r1db_smoke_reader","password":"r1db_reader_secret"}' > "${tmp}/console-user-request.json"
   chmod 600 "${tmp}/console-user-request.json"
   user_status="$(printf 'header = "X-Cockroach-API-Session: %s"\n' "${admin_session}" | \
     curl --config - "${curl_args[@]}" --output "${tmp}/console-user.json" \
@@ -541,7 +541,7 @@ PY
   grant_status="$(printf 'header = "X-Cockroach-API-Session: %s"\n' "${admin_session}" | \
     curl --config - "${curl_args[@]}" --output "${tmp}/console-grant.json" \
       --write-out '%{http_code}' --header 'Content-Type: application/json' \
-      --data '{"username":"meshdb_smoke_reader","database":"console-smoke-db","scope":"table","table":"public.console_smoke_table","preset":"viewer","action":"grant"}' \
+      --data '{"username":"r1db_smoke_reader","database":"console-smoke-db","scope":"table","table":"public.console_smoke_table","preset":"viewer","action":"grant"}' \
       "${base_url}/api/v2/r1db/access/")"
   if [[ "${grant_status}" != "200" ]]; then
     echo "console table access grant failed: $(cat "${tmp}/console-grant.json")" >&2
@@ -549,7 +549,7 @@ PY
   fi
   permissions_status="$(printf 'header = "X-Cockroach-API-Session: %s"\n' "${admin_session}" | \
     curl --config - "${curl_args[@]}" --output "${tmp}/console-permissions.json" \
-      --write-out '%{http_code}' "${base_url}/api/v2/r1db/permissions/?username=meshdb_smoke_reader")"
+      --write-out '%{http_code}' "${base_url}/api/v2/r1db/permissions/?username=r1db_smoke_reader")"
   if [[ "${permissions_status}" != "200" ]] || ! python3 - "${tmp}/console-permissions.json" <<'PY'
 import json
 import pathlib
@@ -567,7 +567,7 @@ PY
     exit 1
   fi
 
-  reader_login_status="$(printf '%s' 'username=meshdb_smoke_reader&password=meshdb_reader_secret' | \
+  reader_login_status="$(printf '%s' 'username=r1db_smoke_reader&password=r1db_reader_secret' | \
     curl "${curl_args[@]}" --output "${tmp}/console-reader-login.json" \
     --write-out '%{http_code}' --header 'Content-Type: application/x-www-form-urlencoded' \
     --data-binary @- "${base_url}/api/v2/login/")"
