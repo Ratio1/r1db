@@ -64839,7 +64839,13 @@
     {
       "basis": "engine/vendor/golang.org/x/net/LICENSE",
       "path": "engine/vendor/golang.org/x/net/http2/flow.go",
-      "sha256": "cdf7ad077c182118d3967a63d33f0731717b060b43bded46796d226c8fcb11f2",
+      "sha256": "77b7b0eb63b9f642d722265a4101c2f7282f51969020afc493f9ba852a05c04d",
+      "spdx": "BSD-3-Clause"
+    },
+    {
+      "basis": "engine/vendor/golang.org/x/net/LICENSE",
+      "path": "engine/vendor/golang.org/x/net/http2/flow_r1_test.go",
+      "sha256": "627e458f46352f6044d04a49f24e83ff97b17025165c2c62b08d3b9924e33059",
       "spdx": "BSD-3-Clause"
     },
     {
@@ -64899,7 +64905,7 @@
     {
       "basis": "engine/vendor/golang.org/x/net/LICENSE",
       "path": "engine/vendor/golang.org/x/net/http2/server.go",
-      "sha256": "cf07329cd7d5d95909a5404f3b29f10f4252189012b98ad4c8fdbfca384cb9d1",
+      "sha256": "9c2147001439bc8abf231c16f11d7722aececa6c0d886411ef614097957f264a",
       "spdx": "BSD-3-Clause"
     },
     {
@@ -64917,7 +64923,7 @@
     {
       "basis": "engine/vendor/golang.org/x/net/LICENSE",
       "path": "engine/vendor/golang.org/x/net/http2/transport.go",
-      "sha256": "2a9e06b766540b61e7a62333c85ec8956e113e8b37380e0d77e648821d5928fa",
+      "sha256": "e8c64235324a67429deebc59ea7ed695aba27bc3724a6a0026a4a1489acb04f9",
       "spdx": "BSD-3-Clause"
     },
     {
@@ -64947,7 +64953,7 @@
     {
       "basis": "engine/vendor/golang.org/x/net/LICENSE",
       "path": "engine/vendor/golang.org/x/net/http2/writesched.go",
-      "sha256": "c09ff6579f38fac88fab3e925f89de0b40713edd6e941790c6c3deb40a16ea66",
+      "sha256": "69cf04534af0ff6e0d7451780b1ebe00d8db08470937b70b12612124556d4d40",
       "spdx": "BSD-3-Clause"
     },
     {
@@ -68073,7 +68079,13 @@
     {
       "basis": "engine/vendor/golang.org/x/text/LICENSE",
       "path": "engine/vendor/golang.org/x/text/secure/precis/nickname.go",
-      "sha256": "6b0c338af3fe1d23cb00fe726de2068a1ebf3f0fd78eab35bd88eb2fd08130f3",
+      "sha256": "11bc1cd65a78ebb296a213bda25f8ef49b158a6743fe6fba182dd62b7a4017ab",
+      "spdx": "BSD-3-Clause"
+    },
+    {
+      "basis": "engine/vendor/golang.org/x/text/LICENSE",
+      "path": "engine/vendor/golang.org/x/text/secure/precis/nickname_r1_test.go",
+      "sha256": "b75ed6346137862ffac21e99520fc6998be88782b75017c51b02f12dc464c361",
       "spdx": "BSD-3-Clause"
     },
     {
@@ -68085,7 +68097,7 @@
     {
       "basis": "engine/vendor/golang.org/x/text/LICENSE",
       "path": "engine/vendor/golang.org/x/text/secure/precis/profile.go",
-      "sha256": "cf43411345bd6194604aa3d988c106f3329e1fd8cf9a1775dae3379055be70b2",
+      "sha256": "df7380bbd0bf74bc561ef1f20fd3784835e382d35884ec22fe34c73cf97c44b4",
       "spdx": "BSD-3-Clause"
     },
     {

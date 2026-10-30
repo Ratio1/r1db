@@ -83,7 +83,7 @@ jobs:
           python3 scripts/verify-public-test-fixtures.py
           python3 scripts/verify-security-vex.py
           python3 scripts/generate-source-manifest.py --check
-          python3 -m unittest tests.test_release_contract tests.test_sbom_contract tests.test_cloudflared_source_contract
+          python3 -m unittest tests.test_release_contract tests.test_sbom_contract tests.test_cloudflared_source_contract tests.test_october_security_contract
           bash -n entrypoint.sh scripts/*.sh testbed/*.sh
 
       - name: Validate immutable source release identity
@@ -160,7 +160,7 @@ jobs:
             --env GOPROXY=https://proxy.golang.org \
             --env GOSUMDB=sum.golang.org \
             --env GOTOOLCHAIN=local \
-            golang:1.26.6-bookworm@sha256:116d58cbd88c1297624acc6e967a060012422bacf9930927e23fb719189c6f36 \
+            golang:1.26.10-bookworm@sha256:23ce71337b726608afb1bc00986e630a05034a87a87ea1fc2cd1ae5cf33387eb \
             /usr/local/go/bin/go run ./scripts/verify-vendor-provenance.go
 
       - name: Verify the offline OSS runtime closure
@@ -169,7 +169,7 @@ jobs:
             --volume "$PWD:/workspace" \
             --workdir /workspace \
             --entrypoint python3 \
-            golang:1.26.6-bookworm@sha256:116d58cbd88c1297624acc6e967a060012422bacf9930927e23fb719189c6f36 \
+            golang:1.26.10-bookworm@sha256:23ce71337b726608afb1bc00986e630a05034a87a87ea1fc2cd1ae5cf33387eb \
             scripts/verify-runtime-closure.py
 
       - name: Resolve deterministic release metadata
@@ -276,12 +276,12 @@ jobs:
           docker run --rm \
             --volume "$PWD:/workspace:ro" \
             --workdir /workspace \
-            golang:1.26.6-bookworm@sha256:116d58cbd88c1297624acc6e967a060012422bacf9930927e23fb719189c6f36 \
+            golang:1.26.10-bookworm@sha256:23ce71337b726608afb1bc00986e630a05034a87a87ea1fc2cd1ae5cf33387eb \
             /usr/local/go/bin/go version -m ./cockroach > artifacts/cockroach.buildinfo.txt
           docker run --rm \
             --volume "$PWD:/workspace:ro" \
             --workdir /workspace \
-            golang:1.26.6-bookworm@sha256:116d58cbd88c1297624acc6e967a060012422bacf9930927e23fb719189c6f36 \
+            golang:1.26.10-bookworm@sha256:23ce71337b726608afb1bc00986e630a05034a87a87ea1fc2cd1ae5cf33387eb \
             /usr/local/go/bin/go version -m ./cloudflared > artifacts/cloudflared.buildinfo.txt
 
       - name: Run the bounded local three-node testbed

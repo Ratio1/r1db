@@ -64,6 +64,8 @@ EXPECTED_ADDED_FILES = {
   "engine/pkg/util/goschedstats/runtime_go1.26_test.go",
 }
 EXPECTED_SECURITY_BACKPORTS = {
+  "CVE-2026-56851",
+  "CVE-2026-78669",
   "CVE-2026-43871",
   "CVE-2026-84304",
   "GO-2026-4518",

@@ -1,6 +1,7 @@
 // Copyright 2014 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
+// Modified by Ratio1 in 2026; see RATIO1_PATCHES.md.
 
 //go:build !(go1.27 && !http2legacy)
 
@@ -79,10 +80,11 @@ func (wr FrameWriteRequest) Consume(n int32) (FrameWriteRequest, FrameWriteReque
 	}
 
 	// Might need to split after applying limits.
-	allowed := wr.stream.flow.available()
-	if n < allowed {
-		allowed = n
+	avail, ok := wr.stream.flow.available()
+	if !ok {
+		return empty, empty, 0
 	}
+	allowed := min(n, avail)
 	if wr.stream.sc.maxFrameSize < allowed {
 		allowed = wr.stream.sc.maxFrameSize
 	}

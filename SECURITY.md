@@ -98,6 +98,28 @@ The exact-version VEX decision is `not_affected` because the vulnerable server
 implementation is absent from both binaries. The VEX gate rejects either
 package entering those closures.
 
+The database engine is built with Go 1.26.10, including fixes for
+`CVE-2026-111943`, `CVE-2026-78667`, `CVE-2026-78669`, and `CVE-2026-97031`.
+Cloudflared and the atomic replacement helper use Go 1.27.3.
+
+`CVE-2026-78669` / `GO-2026-6611` also affects vendored x/net HTTP/2.
+The engine's v0.56.0 source contains the complete flow-control fix from
+`golang/net` commit `cc7d34fd2dd5864bcafe3e5e0a84919240be98c0`. Repeated
+initial-window settings no longer visit every stream; stream and connection
+window-limit errors are preserved. `CVE-2026-56851` / `GO-2026-6629` affects
+PRECIS nickname transforms with short destination buffers. The engine's x/text
+v0.39.0 source contains the complete fix from `golang/text` commit
+`02aa981a75cb366b39e71729b935c15a7b4e146a`. Implementation preimages, resulting
+files, and regressions for both backports are pinned in
+`source/ratio1-engine-overrides.json`. The exact VEX decisions are `fixed`.
+
+`CVE-2026-63209` / `GHSA-259r-337f-4rfw` affects the S2 dictionary decoder in
+`github.com/klauspost/compress`. The engine's v1.17.8 dependency retains other
+compression packages, but contains no `github.com/klauspost/compress/s2` source
+or compiled package. The exact-version `not_affected` VEX decision is guarded
+against S2 appearing on disk, in `vendor/modules.txt`, or in the verified
+runtime source closure.
+
 `CVE-2026-56854` / `GO-2026-6303` affects SSH server authentication reached
 through `golang.org/x/crypto/ssh.NewServerConn` before x/crypto v0.55.0. The
 database engine's verified vendored runtime closure contains no x/crypto SSH
@@ -116,8 +138,9 @@ retaining Debian package metadata and copyright files for every copied OS
 component.
 
 The retained `libpcre2-8-0` runtime library is updated to Debian's fixed
-`10.42-1+deb12u1` build for `CVE-2026-86145`, `CVE-2026-89157`, and
-`CVE-2026-89161`. The runtime builder pins the 2026-09-24 Debian snapshot and
+`10.42-1+deb12u2` build for `CVE-2026-86145`, `CVE-2026-89157`,
+`CVE-2026-89161`, and `CVE-2026-103111`. The runtime builder pins the
+2026-10-04 Debian snapshot and
 bundles the corresponding `pcre2` source package with the image.
 
 - `CVE-2026-53615` is in util-linux's DOS/EBR parser. Only `setsid` is retained;

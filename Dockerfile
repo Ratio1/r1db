@@ -44,7 +44,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 \
   go build -trimpath -buildvcs=false -ldflags='-s -w' \
     -o /out/r1-atomic-replace /tmp/atomic-replace.go
 
-FROM golang:1.26.6-bookworm@sha256:116d58cbd88c1297624acc6e967a060012422bacf9930927e23fb719189c6f36 AS engine-builder
+FROM golang:1.26.10-bookworm@sha256:23ce71337b726608afb1bc00986e630a05034a87a87ea1fc2cd1ae5cf33387eb AS engine-builder
 
 ARG RATIO1_VERSION=v1.0.10
 ARG SOURCE_DATE_EPOCH=1727820937
@@ -54,6 +54,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     GOPROXY=off \
     GOSUMDB=off
 
+# The digest-pinned Go image already supplies the build-stage CA bundle.
 RUN printf '%s\n' \
       'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260812T000000Z bookworm main' \
       'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20260812T000000Z bookworm-security main' \
@@ -62,7 +63,6 @@ RUN printf '%s\n' \
   && apt-get -o Acquire::Check-Valid-Until=false update \
   && apt-get install -y --no-install-recommends \
     autoconf=2.71-3 \
-    ca-certificates=20230311+deb12u1 \
     cmake=3.25.1-1 \
     g++=4:12.2.0-3 \
     gcc=4:12.2.0-3 \
@@ -101,6 +101,8 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     github.com/jackc/pgproto3/v2 \
     github.com/jackc/pgx/v4/internal/sanitize \
     google.golang.org/grpc/internal/transport \
+    golang.org/x/net/http2 \
+    golang.org/x/text/secure/precis \
     ./pkg/util/ctxutil \
     ./pkg/util/goschedstats \
   && go test -vet=off -mod=vendor \
@@ -136,17 +138,17 @@ FROM debian:bookworm-slim@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN printf '%s\n' \
-      'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260924T000000Z bookworm main' \
-      'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20260924T000000Z bookworm-security main' \
-      'deb-src [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260924T000000Z bookworm main' \
-      'deb-src [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20260924T000000Z bookworm-security main' \
+      'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20261004T000000Z bookworm main' \
+      'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20261004T000000Z bookworm-security main' \
+      'deb-src [check-valid-until=no] http://snapshot.debian.org/archive/debian/20261004T000000Z bookworm main' \
+      'deb-src [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20261004T000000Z bookworm-security main' \
       > /etc/apt/sources.list \
   && rm -f /etc/apt/sources.list.d/debian.sources \
   && apt-get -o Acquire::Check-Valid-Until=false update \
   && apt-get install -y --no-install-recommends \
     bash=5.2.15-2+b13 \
     ca-certificates=20230311+deb12u1 \
-    libpcre2-8-0=10.42-1+deb12u1 \
+    libpcre2-8-0=10.42-1+deb12u2 \
     libtinfo6=6.4-4
 
 COPY --chmod=755 scripts/assemble-runtime-rootfs.sh /usr/local/bin/assemble-runtime-rootfs

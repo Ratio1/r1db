@@ -89,7 +89,7 @@
     "runtimePackages": "source/runtime-packages.txt"
   },
   "buildInputs": {
-    "goBuilder": "golang:1.26.6-bookworm@sha256:116d58cbd88c1297624acc6e967a060012422bacf9930927e23fb719189c6f36",
+    "goBuilder": "golang:1.26.10-bookworm@sha256:23ce71337b726608afb1bc00986e630a05034a87a87ea1fc2cd1ae5cf33387eb",
     "runtime": "debian:bookworm-slim@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241",
     "releaseTooling": {
       "buildx": "v0.36.1",
@@ -130,7 +130,7 @@
       "moduleSourcesSha256": "8444e38d9f6220522c697cb1e86bdb8e6136949a2996612885ff9f5cc5c0c988"
     },
     "debianSnapshot": "20260812T000000Z",
-    "runtimeDebianSnapshot": "20260924T000000Z",
+    "runtimeDebianSnapshot": "20261004T000000Z",
     "sourceDateEpoch": 1727820937
   }
 }

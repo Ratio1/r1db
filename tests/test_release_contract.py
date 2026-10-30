@@ -612,7 +612,7 @@ func value() string {
       f'baseline_repository != "{source_url}.git"',
       read("scripts/verify-provenance.py"),
     )
-    self.assertEqual(json.loads(read("security/openvex.json"))["@id"], f"{source_url}/security/vex/9")
+    self.assertEqual(json.loads(read("security/openvex.json"))["@id"], f"{source_url}/security/vex/10")
     self.assertEqual(
       json.loads(read("source/ratio1-engine-overrides.json"))["dependencySnapshot"]
       ["sourceBaseline"]["repository"],
@@ -707,7 +707,7 @@ func value() string {
     self.assertEqual(provenance["upstream"]["changeDate"], "2026-04-01")
     self.assertEqual(
       provenance["buildInputs"]["goBuilder"],
-      "golang:1.26.6-bookworm@sha256:116d58cbd88c1297624acc6e967a060012422bacf9930927e23fb719189c6f36",
+      "golang:1.26.10-bookworm@sha256:23ce71337b726608afb1bc00986e630a05034a87a87ea1fc2cd1ae5cf33387eb",
     )
     dependencies = {item["name"]: item for item in provenance["nativeDependencies"]}
     self.assertEqual(set(dependencies), {"geos", "jemalloc", "libedit", "proj"})
@@ -748,7 +748,10 @@ func value() string {
     )
     self.assertEqual(
       {record["advisory"] for record in overrides["securityBackports"]},
-      {"CVE-2026-43871", "CVE-2026-84304", "GO-2026-4518", "GO-2026-5004"},
+      {
+        "CVE-2026-43871", "CVE-2026-84304", "CVE-2026-78669", "CVE-2026-56851",
+        "GO-2026-4518", "GO-2026-5004",
+      },
     )
     self.assertEqual(
       {record["id"] for record in overrides["dependencyCompatibilityBackports"]},
@@ -1000,16 +1003,16 @@ func value() string {
     self.assertNotIn("perl -0pi", dockerfile)
     self.assertIn("GOPROXY=off", dockerfile)
     self.assertIn("snapshot.debian.org/archive/debian/20260812T000000Z", dockerfile)
-    self.assertIn("snapshot.debian.org/archive/debian-security/20260924T000000Z", dockerfile)
-    self.assertIn("libpcre2-8-0=10.42-1+deb12u1", dockerfile)
-    self.assertIn("libpcre2-8-0=10.42-1+deb12u1", read("source/runtime-packages.txt"))
+    self.assertIn("snapshot.debian.org/archive/debian-security/20261004T000000Z", dockerfile)
+    self.assertIn("libpcre2-8-0=10.42-1+deb12u2", dockerfile)
+    self.assertIn("libpcre2-8-0=10.42-1+deb12u2", read("source/runtime-packages.txt"))
     self.assertIn(
-      "libpcre2-8-0\t10.42-1+deb12u1\tpcre2\t10.42-1+deb12u1",
+      "libpcre2-8-0\t10.42-1+deb12u2\tpcre2\t10.42-1+deb12u2",
       read("source/runtime-package-sources.tsv"),
     )
     self.assertEqual(
       json.loads(read("source/provenance.json"))["buildInputs"]["runtimeDebianSnapshot"],
-      "20260924T000000Z",
+      "20261004T000000Z",
     )
     self.assertIn("autoconf=2.71-3", dockerfile)
     self.assertIn("bash=5.2.15-2+b13", dockerfile)
