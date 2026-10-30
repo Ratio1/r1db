@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-image="${1:-deeploy-cockroachdb-service:local}"
+image="${1:-r1db:local}"
 initial_image="${CRDB_TEST_INITIAL_IMAGE:-${image}}"
 run_image="${initial_image}"
 run_id="$$-${RANDOM}"

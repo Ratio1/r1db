@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=ghcr.io/ratio1/deeploy-cockroachdb-service:main
+ARG BASE_IMAGE=ghcr.io/ratio1/r1db:stable
 
 FROM ${BASE_IMAGE}
 

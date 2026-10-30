@@ -1,2 +1,4 @@
 # Source manifests and provenance hashes cover exact repository bytes.
 * -text
+# Go build metadata retains empty trailing checksum fields.
+source/cloudflared-buildinfo.txt whitespace=-blank-at-eol

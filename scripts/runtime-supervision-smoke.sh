@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-base_image="${1:-ghcr.io/ratio1/deeploy-cockroachdb-service:main}"
+base_image="${1:-ghcr.io/ratio1/r1db:stable}"
 expectation="${2:-fixed}"
 broken_base_image="${CRDB_BROKEN_BASE_IMAGE:-ghcr.io/ratio1/deeploy-cockroachdb-service@sha256:1c082541525f2ec73b07286f9773c5069f70c959c9e67f4a5e1d5200688a1ebe}"
 case "${expectation}" in

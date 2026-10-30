@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-base_image="${1:-ghcr.io/ratio1/deeploy-cockroachdb-service:main}"
+base_image="${1:-ghcr.io/ratio1/r1db:stable}"
 run_id="$$-${RANDOM}"
 test_image="deeploy-crdb-runtime-candidate:${run_id}"
 

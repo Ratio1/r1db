@@ -1,11 +1,39 @@
 {
   "@context": "https://openvex.dev/ns/v0.2.0",
-  "@id": "https://github.com/Ratio1/r1db/security/vex/8",
+  "@id": "https://github.com/Ratio1/r1db/security/vex/10",
   "author": "Ratio1",
   "role": "Project Maintainer",
-  "timestamp": "2026-09-24T00:00:00Z",
-  "version": 8,
+  "timestamp": "2026-10-30T00:00:00Z",
+  "version": 10,
   "statements": [
+    {
+      "vulnerability": {
+        "@id": "https://nvd.nist.gov/vuln/detail/CVE-2026-63209",
+        "aliases": ["CVE-2026-63209", "GHSA-259r-337f-4rfw"]
+      },
+      "products": [{"@id": "pkg:golang/github.com/klauspost/compress@v1.17.8"}],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The advisory requires github.com/klauspost/compress/s2.NewDict and Dict.Encode. The engine retains compress v1.17.8 metadata but distributes no S2 package on disk, in vendor/modules.txt, or in its verified runtime source closure. The VEX verifier rejects any S2 source path, package entry, runtime file, or change to the exact module version."
+    },
+    {
+      "vulnerability": {
+        "@id": "https://nvd.nist.gov/vuln/detail/CVE-2026-78669",
+        "aliases": ["CVE-2026-78669", "GO-2026-6611"]
+      },
+      "products": [{"@id": "pkg:golang/golang.org/x/net@v0.56.0"}],
+      "status": "fixed",
+      "status_notes": "Ratio1 backports the official HTTP/2 initial-window flow-control fix from golang/net commit cc7d34fd2dd5864bcafe3e5e0a84919240be98c0 to vendored v0.56.0. SETTINGS updates perform constant work without traversing active streams, and stream-window overflow is detected lazily. Exact implementation preimages, patched files, and self-contained flow-control regressions are hash-pinned in source/ratio1-engine-overrides.json."
+    },
+    {
+      "vulnerability": {
+        "@id": "https://nvd.nist.gov/vuln/detail/CVE-2026-56851",
+        "aliases": ["CVE-2026-56851", "GO-2026-6629"]
+      },
+      "products": [{"@id": "pkg:golang/golang.org/x/text@v0.39.0"}],
+      "status": "fixed",
+      "status_notes": "Ratio1 backports the official secure/precis Nickname short-destination and streaming-checker fix from golang/text commit 02aa981a75cb366b39e71729b935c15a7b4e146a to vendored v0.39.0. The vulnerable package is compiled into the engine; this decision relies on the fix rather than package exclusion. Exact implementation preimages, patched files, and short-buffer plus invalid/partial UTF-8 regressions are hash-pinned in source/ratio1-engine-overrides.json."
+    },
     {
       "vulnerability": {
         "@id": "https://nvd.nist.gov/vuln/detail/CVE-2026-42154",
@@ -70,11 +98,11 @@
           "@id": "pkg:golang/google.golang.org/grpc@v1.82.1"
         },
         {
-          "@id": "pkg:golang/google.golang.org/grpc@v1.83.0"
+          "@id": "pkg:golang/google.golang.org/grpc@v1.83.2"
         }
       ],
       "status": "fixed",
-      "status_notes": "Ratio1 backports the official gRPC-Go receive-buffer compaction fix from commit 8cfeca0e1ee5ea0980dcc320e20240fa1079ec77 to the engine's vendored v1.82.1 source and the Cloudflared build's vendored v1.83.0 source. Exact preimage, patch, distributed-source, and regression hashes are enforced by the provenance and security verifiers."
+      "status_notes": "Ratio1 backports the official gRPC-Go receive-buffer compaction fix from commit 8cfeca0e1ee5ea0980dcc320e20240fa1079ec77 to the engine's vendored v1.82.1 source. Cloudflared selects upstream-fixed v1.83.2; its verified module sums, source markers, and binary hash enforce the fix without a local patch."
     },
     {
       "vulnerability": {
@@ -89,7 +117,7 @@
           "@id": "pkg:golang/google.golang.org/grpc@v1.82.1"
         },
         {
-          "@id": "pkg:golang/google.golang.org/grpc@v1.83.0"
+          "@id": "pkg:golang/google.golang.org/grpc@v1.83.2"
         }
       ],
       "status": "not_affected",
@@ -229,7 +257,7 @@
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "The advisory affects SSH server authentication reached through ssh.NewServerConn. The database engine excludes golang.org/x/crypto/ssh from its vendored runtime closure. Cloudflared compiles that package only for sshgen public-key parsing and authorized-key marshaling; an exact-source Go AST gate permits only ssh.NewPublicKey and ssh.MarshalAuthorizedKey and rejects server configuration or authentication use."
+      "impact_statement": "The advisory affects SSH server authentication reached through ssh.NewServerConn. The database engine's v0.53.0 dependency excludes golang.org/x/crypto/ssh from its vendored runtime closure. Cloudflared now embeds fixed x/crypto v0.58.0 and is outside this exact-version exception."
     }
   ]
 }

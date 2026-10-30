@@ -40,6 +40,7 @@ crypto/internal/fips140/edwards25519
 crypto/internal/fips140/edwards25519/field
 crypto/internal/fips140/hkdf
 crypto/internal/fips140/hmac
+crypto/internal/fips140/mldsa
 crypto/internal/fips140/mlkem
 crypto/internal/fips140/nistec
 crypto/internal/fips140/nistec/fiat
@@ -63,6 +64,7 @@ crypto/internal/rand
 crypto/internal/randutil
 crypto/internal/sysrand
 crypto/md5
+crypto/mldsa
 crypto/mlkem
 crypto/pbkdf2
 crypto/rand
@@ -78,13 +80,21 @@ crypto/tls/internal/fips140tls
 crypto/x509
 crypto/x509/pkix
 database/sql/driver
+database/sql/internal
 embed
 encoding
 encoding/asn1
+encoding/base32
 encoding/base64
 encoding/binary
 encoding/hex
 encoding/json
+encoding/json/internal
+encoding/json/internal/jsonflags
+encoding/json/internal/jsonopts
+encoding/json/internal/jsonwire
+encoding/json/jsontext
+encoding/json/v2
 encoding/pem
 errors
 expvar
@@ -120,7 +130,6 @@ github.com/cloudflare/cloudflared/diagnostic/network
 github.com/cloudflare/cloudflared/edgediscovery
 github.com/cloudflare/cloudflared/edgediscovery/allregions
 github.com/cloudflare/cloudflared/features
-github.com/cloudflare/cloudflared/fips
 github.com/cloudflare/cloudflared/flow
 github.com/cloudflare/cloudflared/hello
 github.com/cloudflare/cloudflared/ingress
@@ -137,6 +146,7 @@ github.com/cloudflare/cloudflared/prechecks
 github.com/cloudflare/cloudflared/proxy
 github.com/cloudflare/cloudflared/quic
 github.com/cloudflare/cloudflared/quic/v3
+github.com/cloudflare/cloudflared/quicktunnelauth
 github.com/cloudflare/cloudflared/retry
 github.com/cloudflare/cloudflared/signal
 github.com/cloudflare/cloudflared/socks
@@ -197,6 +207,7 @@ github.com/grpc-ecosystem/grpc-gateway/v2/utilities
 github.com/json-iterator/go
 github.com/klauspost/compress/flate
 github.com/klauspost/compress/internal/le
+github.com/klauspost/compress/internal/regmask
 github.com/mattn/go-colorable
 github.com/mattn/go-isatty
 github.com/mitchellh/go-homedir
@@ -267,15 +278,17 @@ go.opentelemetry.io/otel/metric/noop
 go.opentelemetry.io/otel/propagation
 go.opentelemetry.io/otel/sdk
 go.opentelemetry.io/otel/sdk/instrumentation
+go.opentelemetry.io/otel/sdk/internal/attrnorm
 go.opentelemetry.io/otel/sdk/internal/x
 go.opentelemetry.io/otel/sdk/resource
 go.opentelemetry.io/otel/sdk/trace
 go.opentelemetry.io/otel/sdk/trace/internal/env
 go.opentelemetry.io/otel/sdk/trace/internal/observ
 go.opentelemetry.io/otel/semconv/internal
+go.opentelemetry.io/otel/semconv/internal/metricpool
 go.opentelemetry.io/otel/semconv/v1.37.0
-go.opentelemetry.io/otel/semconv/v1.41.0
-go.opentelemetry.io/otel/semconv/v1.41.0/otelconv
+go.opentelemetry.io/otel/semconv/v1.43.0
+go.opentelemetry.io/otel/semconv/v1.43.0/otelconv
 go.opentelemetry.io/otel/semconv/v1.7.0
 go.opentelemetry.io/otel/trace
 go.opentelemetry.io/otel/trace/embedded
@@ -293,7 +306,6 @@ go/build
 go/build/constraint
 go/doc
 go/doc/comment
-go/internal/scannerhooks
 go/parser
 go/scanner
 go/token
@@ -531,8 +543,11 @@ net/http/httptrace
 net/http/httputil
 net/http/internal
 net/http/internal/ascii
+net/http/internal/http2
 net/http/internal/httpcommon
+net/http/internal/httpsfv
 net/http/pprof
+net/mail
 net/netip
 net/textproto
 net/url
@@ -549,7 +564,6 @@ reflect
 regexp
 regexp/syntax
 runtime
-runtime/cgo
 runtime/debug
 runtime/metrics
 runtime/pprof
@@ -570,6 +584,7 @@ unicode/utf16
 unicode/utf8
 unique
 unsafe
+uuid
 vendor/golang.org/x/crypto/chacha20
 vendor/golang.org/x/crypto/chacha20poly1305
 vendor/golang.org/x/crypto/cryptobyte
