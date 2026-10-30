@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-image="${1:-deeploy-cockroachdb-service:local}"
+image="${1:-r1db:local}"
 client_image="${CRDB_TEST_CLIENT_IMAGE:-postgres@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777}"
 sniffer_image="${CRDB_TEST_SNIFFER_IMAGE:-nicolaka/netshoot@sha256:a20c2531bf35436ed3766cd6cfe89d352b050ccc4d7005ce6400adf97503da1b}"
 run_id="$$-${RANDOM}"

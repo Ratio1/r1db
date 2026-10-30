@@ -80,12 +80,12 @@ patched source, and boundary regressions are hash-pinned in
 
 `CVE-2026-84304` / `GHSA-vp52-pcj8-j9qc` permits unauthenticated HTTP/2 DATA
 frame fragmentation to retain excessive heap objects in gRPC-Go servers. The
-database engine embeds gRPC v1.82.1 and Cloudflared embeds v1.83.0, so both are
-treated as affected. R1DB backports the official v1.83.1 receive-buffer
-compaction fix from commit `8cfeca0e1ee5ea0980dcc320e20240fa1079ec77` to both
-source trees. Engine preimage, result, and regression hashes are enforced by
-`source/ratio1-engine-overrides.json`; Cloudflared patch, preimage, result, and
-binary hashes are enforced by `source/provenance.json` and
+database engine embeds gRPC v1.82.1 with the official v1.83.1 receive-buffer
+compaction backport from commit `8cfeca0e1ee5ea0980dcc320e20240fa1079ec77`.
+Cloudflared embeds upstream-fixed gRPC v1.83.2. Engine preimage, result, and
+regression hashes are enforced by `source/ratio1-engine-overrides.json`;
+Cloudflared module sums, fixed-source markers, and binary hashes are enforced by
+`source/provenance.json` and
 `scripts/verify-cloudflared-source.py`. The exact VEX decision is `fixed` for
 both scanner-visible module versions.
 
@@ -101,13 +101,13 @@ package entering those closures.
 `CVE-2026-56854` / `GO-2026-6303` affects SSH server authentication reached
 through `golang.org/x/crypto/ssh.NewServerConn` before x/crypto v0.55.0. The
 database engine's verified vendored runtime closure contains no x/crypto SSH
-package. The pinned Cloudflared binary does compile that package, but its
+package. Cloudflared now embeds fixed x/crypto v0.58.0, so that binary no longer
+needs this VEX exception. The pinned binary still compiles the SSH package; its
 first-party `sshgen` code uses only `NewPublicKey` and `MarshalAuthorizedKey`.
 The exact pinned source is checked with Go's compiled-package list and AST;
 the gate rejects `NewServerConn`, `ServerConfig`, authentication callbacks,
-dot imports, or any SSH import outside `sshgen`. A future upstream Cloudflared
-pin should move to x/crypto v0.55.0 or newer, at which point this VEX exception
-must be removed.
+dot imports, or any SSH import outside `sshgen`. The exact-version VEX exception
+applies only to the engine's v0.53.0 dependency.
 
 The final image is assembled from a tracked minimal root filesystem rather
 than a complete Debian userspace. This removes Perl, gzip, zlib, block-device

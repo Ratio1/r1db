@@ -40,6 +40,17 @@ def source_baseline(repository: Path, commit: str, content: bytes) -> dict:
 
 
 class ReleaseContractTests(unittest.TestCase):
+  def test_runtime_test_defaults_use_r1db_images(self):
+    for relative in (
+      "scripts/smoke.sh", "scripts/secure-single-node-smoke.sh",
+      "scripts/sql-tls-transport-smoke.sh", "scripts/local-multinode-smoke.sh",
+    ):
+      self.assertIn('image="${1:-r1db:local}"', read(relative))
+    for relative in ("scripts/validate-runtime-change.sh", "scripts/runtime-supervision-smoke.sh"):
+      self.assertIn('base_image="${1:-ghcr.io/ratio1/r1db:stable}"', read(relative))
+    for relative in ("tests/runtime-supervision/Dockerfile", "tests/runtime-supervision/Dockerfile.production-overlay"):
+      self.assertIn("ARG BASE_IMAGE=ghcr.io/ratio1/r1db:stable", read(relative))
+
 
   def test_console_has_a_renderable_first_party_asset(self):
     bundle_path = ROOT / "engine/pkg/ui/distoss/assets/bundle.js"
@@ -601,7 +612,7 @@ func value() string {
       f'baseline_repository != "{source_url}.git"',
       read("scripts/verify-provenance.py"),
     )
-    self.assertEqual(json.loads(read("security/openvex.json"))["@id"], f"{source_url}/security/vex/8")
+    self.assertEqual(json.loads(read("security/openvex.json"))["@id"], f"{source_url}/security/vex/9")
     self.assertEqual(
       json.loads(read("source/ratio1-engine-overrides.json"))["dependencySnapshot"]
       ["sourceBaseline"]["repository"],
@@ -704,14 +715,14 @@ func value() string {
       for key in ("sourceUrl", "commit", "treeSha256", "license", "licenseFile", "role"):
         self.assertTrue(dependency.get(key), f"native dependency is missing {key}: {dependency}")
     cloudflared = provenance["buildInputs"]["cloudflared"]
-    self.assertEqual(cloudflared["commit"], "b4f47e2ab538ab6e31d3dc6adc5489455ad446de")
+    self.assertEqual(cloudflared["commit"], "35b379ac174d60a4301615defedc821de5625cef")
     self.assertEqual(
       cloudflared["sourceArchiveSha256"],
-      "e897f2cdb6f63964bb7b5841df80087489a65ab9fda356ef48dd13202bba59c0",
+      "ee21af3280b31559b257e40ff6024956c066e3da6fded6810bf2b3e4749c1186",
     )
     self.assertEqual(
       cloudflared["binarySha256"],
-      "d6e54c10c671c061bcb04404c9e2fd7dedb4f5f8a4d9b9ec1b35b6fa1973b62d",
+      "af3ba5c4c3618480164c0bf42c0a25ac038fbdcaab69dec13b373a58cbce8322",
     )
     self.assertEqual(
       provenance["buildInputs"]["releaseTooling"],
@@ -751,7 +762,7 @@ func value() string {
     for row in rows[1:]:
       package, url, spdx = row.split(",", 2)
       self.assertTrue(package)
-      self.assertIn("/blob/", url)
+      self.assertRegex(url, r"/(?:blob|\+)/[0-9a-f]{40}/")
       self.assertNotIn("/blob/HEAD/", url)
       self.assertNotIn(spdx.lower(), {"", "unknown", "noassertion"})
     by_package = {row.split(",", 2)[0]: row.split(",", 2)[2] for row in rows[1:]}
@@ -772,10 +783,11 @@ func value() string {
     self.assertTrue((ROOT / "licenses/cloudflared/dependencies/gopkg.in/yaml.v2/LICENSE.libyaml").is_file())
     build_info = read("source/cloudflared-buildinfo.txt")
     self.assertIn("github.com/cloudflare/cloudflared/cmd/cloudflared", build_info)
-    self.assertIn("/cloudflared: go1.26.6", build_info)
-    self.assertIn("google.golang.org/grpc\tv1.83.0", build_info)
+    self.assertIn("/cloudflared: go1.27.3", build_info)
+    self.assertIn("google.golang.org/grpc\tv1.83.2", build_info)
     self.assertNotIn("vcs.modified=true", build_info)
-    self.assertEqual(len(read("source/cloudflared-compiled-packages.txt").splitlines()), 603)
+    self.assertEqual(len(read("source/cloudflared-compiled-packages.txt").splitlines()), 618)
+    self.assertNotIn("runtime/cgo", read("source/cloudflared-compiled-packages.txt").splitlines())
 
   def test_checked_out_source_has_no_ccl_implementation_or_nested_git(self):
     forbidden_paths = (
@@ -1010,8 +1022,8 @@ func value() string {
     self.assertIn("google.golang.org/grpc/internal/transport", dockerfile)
     self.assertIn("./pkg/util/ctxutil", dockerfile)
     self.assertIn("./pkg/util/goschedstats", dockerfile)
-    self.assertIn("d6e54c10c671c061bcb04404c9e2fd7dedb4f5f8a4d9b9ec1b35b6fa1973b62d", dockerfile)
-    self.assertIn("ADD --checksum=sha256:e897f2cdb6f63964bb7b5841df80087489a65ab9fda356ef48dd13202bba59c0", dockerfile)
+    self.assertIn("af3ba5c4c3618480164c0bf42c0a25ac038fbdcaab69dec13b373a58cbce8322", dockerfile)
+    self.assertIn("ADD --checksum=sha256:ee21af3280b31559b257e40ff6024956c066e3da6fded6810bf2b3e4749c1186", dockerfile)
     self.assertNotRegex(lowered, r"from\s+cloudflare/cloudflared")
     self.assertIn("scripts/verify-cloudflared-source.py", dockerfile)
     self.assertIn("ARG BUILD_JOBS=4", dockerfile)
@@ -1722,7 +1734,7 @@ printf '%s' "${FAKE_GITHUB_STATUS}"
       statements[0]["products"],
       [
         {"@id": "pkg:golang/google.golang.org/grpc@v1.82.1"},
-        {"@id": "pkg:golang/google.golang.org/grpc@v1.83.0"},
+        {"@id": "pkg:golang/google.golang.org/grpc@v1.83.2"},
       ],
     )
 

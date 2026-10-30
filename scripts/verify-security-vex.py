@@ -27,7 +27,7 @@ UTIL_LINUX_PURL = (
 LIBTINFO_PURL = "pkg:deb/debian/libtinfo6@6.4-4?arch=amd64&distro=debian-12.15"
 X_CRYPTO_PURL = "pkg:golang/golang.org/x/crypto@v0.53.0"
 GRPC_ENGINE_PURL = "pkg:golang/google.golang.org/grpc@v1.82.1"
-GRPC_CLOUDFLARED_PURL = "pkg:golang/google.golang.org/grpc@v1.83.0"
+GRPC_CLOUDFLARED_PURL = "pkg:golang/google.golang.org/grpc@v1.83.2"
 REMOTE_PREFIX = "engine/vendor/github.com/prometheus/prometheus/storage/remote/"
 
 EXPECTED = {
@@ -199,21 +199,18 @@ def verify_grpc_backport() -> None:
   provenance = json.loads((ROOT / "source/provenance.json").read_text(encoding="utf-8"))
   cloudflared = provenance["buildInputs"]["cloudflared"]
   cloud_records = cloudflared.get("securityBackports", [])
-  if len(cloud_records) != 1 or cloud_records[0].get("module") != "google.golang.org/grpc@v1.83.0":
-    fail("Cloudflared gRPC backport metadata differs from the VEX product")
-  patch = ROOT / cloud_records[0].get("patch", "")
-  if not patch.is_file() or sha256(patch) != cloud_records[0].get("patchSha256"):
-    fail("Cloudflared gRPC backport patch hash differs")
+  if cloud_records != []:
+    fail("Cloudflared must use the upstream-fixed gRPC dependency")
   cloudflared_build = (ROOT / "source/cloudflared-buildinfo.txt").read_text(encoding="utf-8")
-  if "\tdep\tgoogle.golang.org/grpc\tv1.83.0\t\n" not in cloudflared_build:
+  if "\tdep\tgoogle.golang.org/grpc\tv1.83.2\t\n" not in cloudflared_build:
     fail("Cloudflared gRPC version differs from the VEX product")
   dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
-  for marker in (cloud_records[0]["patch"], cloud_records[0]["patchSha256"], "git -C /cloudflared apply"):
+  for marker in ("go mod verify", "go mod vendor", "RUN --network=none"):
     if marker not in dockerfile:
-      fail(f"Cloudflared gRPC backport is not enforced by the image build: {marker}")
+      fail(f"Cloudflared verified dependency build is not enforced: {marker}")
   cloud_verifier = (ROOT / "scripts/verify-cloudflared-source.py").read_text(encoding="utf-8")
-  if "verify_grpc_security_backport" not in cloud_verifier:
-    fail("Cloudflared source verifier does not enforce the gRPC backport")
+  if "verify_grpc_security_fix" not in cloud_verifier:
+    fail("Cloudflared source verifier does not enforce the upstream gRPC fix")
 
 
 def verify_grpc_xds_absence() -> None:
@@ -294,8 +291,8 @@ def verify_ssh_server_authentication_absence() -> None:
     fail("the engine runtime closure unexpectedly includes x/crypto/ssh")
 
   cloudflared_build = (ROOT / "source" / "cloudflared-buildinfo.txt").read_text(encoding="utf-8")
-  if "\tdep\tgolang.org/x/crypto\tv0.53.0\t\n" not in cloudflared_build:
-    fail("the Cloudflared x/crypto version differs from the VEX product")
+  if "\tdep\tgolang.org/x/crypto\tv0.58.0\t\n" not in cloudflared_build:
+    fail("Cloudflared does not select the reviewed fixed x/crypto version")
   cloudflared_packages = set(
     (ROOT / "source" / "cloudflared-compiled-packages.txt").read_text(encoding="utf-8").splitlines()
   )
@@ -324,9 +321,9 @@ def main() -> None:
   document = json.loads(VEX.read_text(encoding="utf-8"))
   if document.get("@context") != "https://openvex.dev/ns/v0.2.0":
     fail("unexpected OpenVEX context")
-  if document.get("@id") != "https://github.com/Ratio1/r1db/security/vex/8":
+  if document.get("@id") != "https://github.com/Ratio1/r1db/security/vex/9":
     fail("unexpected OpenVEX document identity")
-  if document.get("version") != 8 or document.get("timestamp") != "2026-09-24T00:00:00Z":
+  if document.get("version") != 9 or document.get("timestamp") != "2026-10-30T00:00:00Z":
     fail("unexpected OpenVEX document version or timestamp")
   statements = document.get("statements")
   if not isinstance(statements, list) or len(statements) != len(EXPECTED):

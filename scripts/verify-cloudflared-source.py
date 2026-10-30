@@ -13,7 +13,6 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,25 +21,8 @@ PACKAGES = ROOT / "source" / "cloudflared-compiled-packages.txt"
 INVENTORY = ROOT / "source" / "cloudflared-license-inventory.csv"
 LICENSE_ROOT = ROOT / "licenses" / "cloudflared"
 LICENSE_NAMES = {"license", "licence", "copying", "notice", "patents"}
-COMMIT = "b4f47e2ab538ab6e31d3dc6adc5489455ad446de"
-GRPC_BACKPORT_ADVISORY = "CVE-2026-84304"
-GRPC_BACKPORT_MODULE = "google.golang.org/grpc@v1.83.0"
-GRPC_BACKPORT_SOURCE = (
-  "https://github.com/grpc/grpc-go/commit/"
-  "8cfeca0e1ee5ea0980dcc320e20240fa1079ec77"
-)
-GRPC_BACKPORT_PATCH = ROOT / "security/backports/grpc-go-cve-2026-84304-v1.83.0.patch"
-GRPC_BACKPORT_PATCH_SHA256 = "c98442d4f6badbb1b0adcfa79dc28478eb105d1cdbad4ca232c85f4a3c653043"
-GRPC_BACKPORT_FILES = {
-  "vendor/google.golang.org/grpc/internal/envconfig/envconfig.go",
-  "vendor/google.golang.org/grpc/internal/mem/buffer_pool.go",
-  "vendor/google.golang.org/grpc/internal/transport/handler_server.go",
-  "vendor/google.golang.org/grpc/internal/transport/http2_client.go",
-  "vendor/google.golang.org/grpc/internal/transport/http2_server.go",
-  "vendor/google.golang.org/grpc/internal/transport/transport.go",
-  "vendor/google.golang.org/grpc/mem/buffer_pool.go",
-  "vendor/google.golang.org/grpc/mem/buffers.go",
-}
+COMMIT = "35b379ac174d60a4301615defedc821de5625cef"
+MODULE_SOURCES = ROOT / "source/cloudflared-module-sources.json"
 EXTERNAL_LICENSES = {
   "github.com/facebookgo/grace": (
     "dependencies/github.com/facebookgo/grace/license",
@@ -70,6 +52,10 @@ def run(command: list[str], cwd: Path) -> str:
     "GOPROXY": "off",
     "GOSUMDB": "off",
     "GOFLAGS": "-buildvcs=false",
+    "CGO_ENABLED": "0",
+    "GOOS": "linux",
+    "GOARCH": "amd64",
+    "GOAMD64": "v1",
   }
   return subprocess.run(
     command,
@@ -147,23 +133,46 @@ def verify_inventory(build_info: str, source_root: Path) -> None:
     if module not in packages and not any(package.startswith(f"{module}/") for package in packages):
       fail(f"compiled module is absent from the license inventory: {module}")
 
-  pinned_fragment = f"/blob/{COMMIT}/"
-  external_fragments = {
-    "github.com/facebookgo/grace": "/blob/75cf19382434e82df4dd84953f566b8ad23d6e9e/",
-    "github.com/chungthuang/quic-go": "/blob/a9fddf436fc41fcff5e5dd9ccee0fe0dcd71b59c/",
-    "github.com/ipostelnik/cli/v2": "/blob/b6ea8234fe3daa46f5f1777d141b30eb091c2469/",
-  }
+  module_sources = json.loads(MODULE_SOURCES.read_text(encoding="utf-8"))
+  expected_modules = module_paths(build_info) - {"github.com/cloudflare/cloudflared"}
+  if set(module_sources) != expected_modules:
+    fail("Cloudflared module-source evidence differs from the binary closure")
+  go_sums = set((source_root / "go.sum").read_text(encoding="utf-8").splitlines())
   by_package = {row["package"]: row for row in rows}
   for row in rows:
-    expected = external_fragments.get(row["package"], pinned_fragment)
-    if expected not in row["license_url"]:
-      fail(f"license URL is not pinned to its exact source: {row['package']}")
+    package = row["package"]
+    if package == "github.com/cloudflare/cloudflared":
+      if row["license_url"] != f"https://github.com/cloudflare/cloudflared/blob/{COMMIT}/LICENSE":
+        fail("Cloudflared license URL differs from its source commit")
+      continue
+    record = module_sources.get(package, {})
+    if row["license_url"] != record.get("licenseUrl"):
+      fail(f"license URL differs from module evidence: {package}")
+    origin_hash = record.get("origin", {}).get("Hash", "")
+    if not re.fullmatch(r"[0-9a-f]{40}", origin_hash) or origin_hash not in row["license_url"]:
+      fail(f"license URL is not pinned to its exact source: {package}")
+    if f"{record.get('module')} {record.get('version')} {record.get('sum')}" not in go_sums:
+      fail(f"module source is not bound to the upstream go.sum: {package}")
+    notice_root = LICENSE_ROOT / "dependencies" / package
+    if not notice_root.is_dir():
+      original = next((
+        name for name, item in module_sources.items()
+        if item.get("module") == package and (LICENSE_ROOT / "dependencies" / name).is_dir()
+      ), None)
+      notice_root = LICENSE_ROOT / "dependencies" / (original or package)
+    if not any(
+      sha256(path) == record.get("licenseSha256")
+      for path in notice_root.iterdir() if path.is_file()
+    ):
+      fail(f"module license hash differs from retained notices: {package}")
 
   required_conclusions = {
     "github.com/klauspost/compress": "BSD-3-Clause AND Apache-2.0 AND MIT",
     "gopkg.in/yaml.v2": "Apache-2.0 AND MIT",
     "gopkg.in/yaml.v3": "Apache-2.0 AND MIT",
     "github.com/facebookgo/grace": "MIT",
+    "github.com/go-jose/go-jose/v4": "Apache-2.0 AND BSD-3-Clause",
+    "github.com/prometheus/client_golang": "Apache-2.0 AND BSD-3-Clause",
   }
   for package, expected in required_conclusions.items():
     actual = by_package.get(package, {}).get("spdx")
@@ -226,6 +235,7 @@ def verify_source_hashes(source_root: Path) -> None:
     "goSumSha256": source_root / "go.sum",
     "vendorModulesSha256": source_root / "vendor" / "modules.txt",
     "licenseSha256": source_root / "LICENSE",
+    "moduleSourcesSha256": MODULE_SOURCES,
   }
   if cloudflared.get("commit") != COMMIT:
     fail("Cloudflared provenance commit changed")
@@ -234,58 +244,17 @@ def verify_source_hashes(source_root: Path) -> None:
       fail(f"Cloudflared provenance hash differs: {key}")
 
 
-def verify_grpc_security_backport(source_root: Path) -> None:
+def verify_grpc_security_fix(source_root: Path) -> None:
   provenance = json.loads((ROOT / "source" / "provenance.json").read_text(encoding="utf-8"))
-  records = provenance["buildInputs"]["cloudflared"].get("securityBackports", [])
-  if len(records) != 1:
-    fail("Cloudflared security backport set changed")
-  record = records[0]
-  expected_metadata = {
-    "advisory": GRPC_BACKPORT_ADVISORY,
-    "module": GRPC_BACKPORT_MODULE,
-    "source": GRPC_BACKPORT_SOURCE,
-    "patch": GRPC_BACKPORT_PATCH.relative_to(ROOT).as_posix(),
-    "patchSha256": GRPC_BACKPORT_PATCH_SHA256,
-  }
-  for key, expected in expected_metadata.items():
-    if record.get(key) != expected:
-      fail(f"Cloudflared gRPC backport metadata differs: {key}")
-  if not GRPC_BACKPORT_PATCH.is_file() or sha256(GRPC_BACKPORT_PATCH) != GRPC_BACKPORT_PATCH_SHA256:
-    fail("Cloudflared gRPC backport patch hash differs")
-
-  files = record.get("files", [])
-  if {item.get("path") for item in files} != GRPC_BACKPORT_FILES:
-    fail("Cloudflared gRPC backport file set changed")
-  for item in files:
-    path = source_root / item["path"]
-    for key in ("upstreamSha256", "distributedSha256"):
-      if not re.fullmatch(r"[0-9a-f]{64}", item.get(key, "")):
-        fail(f"Cloudflared gRPC backport has an invalid {key}: {item['path']}")
-    if not path.is_file() or sha256(path) != item["distributedSha256"]:
-      fail(f"Cloudflared gRPC backport file hash differs: {item['path']}")
-
-  with tempfile.TemporaryDirectory(prefix="r1-cloudflared-grpc-preimage-") as directory:
-    reverse_root = Path(directory)
-    for item in files:
-      source = source_root / item["path"]
-      target = reverse_root / item["path"]
-      target.parent.mkdir(parents=True, exist_ok=True)
-      shutil.copyfile(source, target)
-    reverse = subprocess.run(
-      [
-        "git", "apply", "--directory=vendor/google.golang.org/grpc",
-        "--unidiff-zero", "--reverse", str(GRPC_BACKPORT_PATCH),
-      ],
-      cwd=reverse_root,
-      check=False,
-      stdout=subprocess.DEVNULL,
-      stderr=subprocess.DEVNULL,
-    )
-    if reverse.returncode != 0:
-      fail("Cloudflared gRPC source is not the pinned backport result")
-    for item in files:
-      if sha256(reverse_root / item["path"]) != item["upstreamSha256"]:
-        fail(f"Cloudflared gRPC backport preimage hash differs: {item['path']}")
+  if provenance["buildInputs"]["cloudflared"].get("securityBackports") != []:
+    fail("Cloudflared must use the upstream-fixed dependency")
+  modules = (source_root / "vendor/modules.txt").read_text(encoding="utf-8")
+  if "# google.golang.org/grpc v1.83.2\n" not in modules:
+    fail("Cloudflared gRPC version differs from the reviewed upstream fix")
+  implementation = (source_root / "vendor/google.golang.org/grpc/internal/transport/transport.go").read_text(encoding="utf-8")
+  for marker in ("compactionThreshold", "EnableReceiveBufferCompaction", "uncompactedSuffixLen", "mem.NewBuffer(newBuf"):
+    if marker not in implementation:
+      fail(f"Cloudflared upstream receive-buffer fix is absent: {marker}")
 
 
 def verify_binary(build_info: str, binary: Path) -> None:
@@ -294,10 +263,10 @@ def verify_binary(build_info: str, binary: Path) -> None:
   if cloudflared.get("binarySha256") != sha256(binary):
     fail("Cloudflared binary hash differs from provenance")
   required = (
-    "/cloudflared: go1.26.6",
-    "\tdep\tgoogle.golang.org/grpc\tv1.83.0\t",
-    "\tdep\tgolang.org/x/net\tv0.56.0\t",
-    "\tdep\tgolang.org/x/text\tv0.40.0\t",
+    "/cloudflared: go1.27.3",
+    "\tdep\tgoogle.golang.org/grpc\tv1.83.2\t",
+    "\tdep\tgolang.org/x/net\tv0.61.0\t",
+    "\tdep\tgolang.org/x/text\tv0.43.0\t",
   )
   for marker in required:
     if marker not in build_info:
@@ -332,7 +301,7 @@ def main() -> None:
   if PACKAGES.read_text(encoding="utf-8") != packages:
     fail("checked-in Cloudflared compiled package closure is stale")
   verify_source_hashes(source_root)
-  verify_grpc_security_backport(source_root)
+  verify_grpc_security_fix(source_root)
   verify_binary(build_info, binary)
   verify_inventory(build_info, source_root)
   print(f"verified Cloudflared source build: {len(packages.splitlines())} compiled packages")

@@ -221,9 +221,12 @@ def check_build_input(build_inputs: dict, dockerfile: str, build_info: str) -> N
       fail(f"Dockerfile does not enforce the Cloudflared {label}")
   if re.search(r"FROM\s+cloudflare/cloudflared", dockerfile, re.IGNORECASE):
     fail("Dockerfile must build Cloudflared from pinned source")
-  if "/cloudflared: go1.26.6" not in build_info:
+  cloud_builder = cloudflared.get("goBuilder", "")
+  if not re.fullmatch(r"golang:1\.27\.3-bookworm@sha256:[0-9a-f]{64}", cloud_builder) or cloud_builder not in dockerfile:
+    fail("Cloudflared Go builder is not separately tag-and-digest pinned")
+  if "/cloudflared: go1.27.3" not in build_info:
     fail("Cloudflared was not built with the pinned Go toolchain")
-  if "\tdep\tgoogle.golang.org/grpc\tv1.83.0\t" not in build_info:
+  if "\tdep\tgoogle.golang.org/grpc\tv1.83.2\t" not in build_info:
     fail("Cloudflared does not embed the reviewed gRPC version")
 
   release_tooling = build_inputs.get("releaseTooling")

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-image="${1:-deeploy-cockroachdb-service:local}"
+image="${1:-r1db:local}"
 network="deeploy-crdb-multinode-smoke"
 node1="deeploy-crdb-multinode-smoke-1"
 node2="deeploy-crdb-multinode-smoke-2"

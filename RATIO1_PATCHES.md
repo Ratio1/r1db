@@ -276,10 +276,11 @@ operation is no longer supported.
 
 - Uses digest-pinned neutral Go and Debian images.
 - Builds Cloudflared from exact source commit
-  `b4f47e2ab538ab6e31d3dc6adc5489455ad446de` and a checksum-pinned source
-  archive, applies the hash-pinned `CVE-2026-84304` gRPC backport, then enforces
-  the reviewed reproducible binary hash. Its focused command, carrier, and
-  tunnel RPC tests run during the image build.
+  `35b379ac174d60a4301615defedc821de5625cef` (2026.10.6) and a checksum-pinned
+  source archive, vendors dependencies against the upstream module sums, and
+  enforces the reviewed reproducible binary hash. It uses a separate pinned
+  Go 1.27.3 builder and upstream-fixed gRPC 1.83.2. Its focused command, carrier,
+  and tunnel RPC tests run offline during the image build.
 - Resolves Debian packages from a dated snapshot and pins direct package
   versions.
 - Pins the runtime root filesystem to the 2026-09-24 snapshot and installs
