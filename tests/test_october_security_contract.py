@@ -18,6 +18,7 @@ import io
 import json
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -29,6 +30,11 @@ SPEC = importlib.util.spec_from_file_location(
 )
 VERIFIER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(VERIFIER)
+PROVENANCE_SPEC = importlib.util.spec_from_file_location(
+  "october_security_provenance", ROOT / "scripts/verify-provenance.py",
+)
+PROVENANCE_VERIFIER = importlib.util.module_from_spec(PROVENANCE_SPEC)
+PROVENANCE_SPEC.loader.exec_module(PROVENANCE_VERIFIER)
 ADVISORIES = ("CVE-2026-78669", "CVE-2026-56851")
 
 
@@ -77,6 +83,20 @@ class OctoberSecurityContractTests(unittest.TestCase):
     for advisory in ADVISORIES:
       VERIFIER.verify_october_backport(advisory)
     VERIFIER.verify_s2_absence()
+
+  @unittest.skipUnless((ROOT / ".git").exists(), "historical preimage integration requires a checkout")
+  def test_missing_preimage_commit_in_git_checkout_is_rejected(self):
+    data = copy.deepcopy(self.overrides)
+    self.backport(data, ADVISORIES[0])["preimageCommit"] = "0" * 40
+    self.save_overrides(data)
+    upstream = json.loads((ROOT / "source/provenance.json").read_text())["upstream"]["commit"]
+    with patch.object(PROVENANCE_VERIFIER, "OVERRIDES", self.root / "source/ratio1-engine-overrides.json"):
+      self.assert_rejected(
+        lambda: PROVENANCE_VERIFIER.check_engine_overrides(
+          upstream, (ROOT / "RATIO1_PATCHES.md").read_text(), None,
+        ),
+        "preimage commit is unavailable",
+      )
 
   def test_new_vex_decisions_have_exact_versions_status_and_aliases(self):
     expected = {
@@ -263,6 +283,122 @@ class OctoberSecurityContractTests(unittest.TestCase):
           VERIFIER.main()
         s2.assert_called_once_with()
         self.assertEqual([call.args[0] for call in backport.call_args_list], list(ADVISORIES))
+
+
+class BackportPreimageProvenanceTests(unittest.TestCase):
+  def setUp(self):
+    directory = tempfile.TemporaryDirectory()
+    self.addCleanup(directory.cleanup)
+    self.directory = Path(directory.name)
+    self.repository = self.directory / "repository"
+    self.repository.mkdir()
+    self.git("init", "--quiet", "--initial-branch=main")
+    self.path = "engine/vendor/example/security.go"
+    target = self.repository / self.path
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"original upstream implementation\n")
+    self.record = {
+      "path": self.path,
+      "preimageSha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+    }
+    self.git("add", ".")
+    self.git("commit", "--quiet", "-m", "retained main baseline")
+    self.commit = self.git("rev-parse", "HEAD").stdout.decode().strip()
+    override = patch.object(PROVENANCE_VERIFIER, "ROOT", self.repository)
+    override.start()
+    self.addCleanup(override.stop)
+
+  def git(self, *args, cwd=None, check=True):
+    return subprocess.run(
+      ["git", "-c", "user.name=R1DB tests", "-c", "user.email=r1db-tests@example.invalid",
+       "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", *args],
+      cwd=cwd or self.repository, check=check, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    )
+
+  def assert_rejected(self, commit, record, message):
+    with redirect_stderr(io.StringIO()) as output:
+      with self.assertRaises(SystemExit) as failure:
+        PROVENANCE_VERIFIER.check_security_backport_preimage(commit, record)
+    self.assertEqual(failure.exception.code, 1)
+    self.assertIn(message, output.getvalue())
+
+  def test_matching_preimage_is_verified(self):
+    PROVENANCE_VERIFIER.check_security_backport_preimage(self.commit, self.record)
+
+  def test_missing_preimage_commit_is_rejected(self):
+    self.assert_rejected("0" * 40, self.record, "commit is unavailable")
+
+  def test_changed_preimage_hash_is_rejected(self):
+    self.assert_rejected(self.commit, {**self.record, "preimageSha256": "0" * 64}, "hash differs")
+
+  def test_missing_preimage_path_is_rejected(self):
+    self.assert_rejected(self.commit, {**self.record, "path": "missing.go"}, "file is unavailable")
+
+  def test_git_worktree_metadata_file_is_supported(self):
+    worktree = self.directory / "worktree"
+    self.git("worktree", "add", "--quiet", "--detach", str(worktree), self.commit)
+    self.assertTrue((worktree / ".git").is_file())
+    with patch.object(PROVENANCE_VERIFIER, "ROOT", worktree):
+      PROVENANCE_VERIFIER.check_security_backport_preimage(self.commit, self.record)
+      self.assert_rejected("0" * 40, self.record, "commit is unavailable")
+
+  def test_broken_git_metadata_cannot_skip_preimages(self):
+    broken = self.directory / "broken"
+    broken.mkdir()
+    (broken / ".git").write_text("gitdir: missing-git-directory\n")
+    with patch.object(PROVENANCE_VERIFIER, "ROOT", broken):
+      self.assert_rejected(self.commit, self.record, "checkout is unavailable")
+
+  def test_malformed_git_metadata_cannot_use_a_parent_repository(self):
+    broken = self.repository / "broken"
+    broken.mkdir()
+    for mode in ("empty directory", "dangling symlink"):
+      with self.subTest(mode=mode):
+        metadata = broken / ".git"
+        if mode == "empty directory":
+          metadata.mkdir()
+        else:
+          metadata.symlink_to("missing-git-directory")
+        with patch.object(PROVENANCE_VERIFIER, "ROOT", broken):
+          self.assert_rejected(self.commit, self.record, "checkout is unavailable")
+        if mode == "empty directory":
+          metadata.rmdir()
+        else:
+          metadata.unlink()
+
+  def test_source_archive_does_not_require_git_history(self):
+    archive = self.directory / "archive"
+    archive.mkdir()
+    with patch.object(PROVENANCE_VERIFIER, "ROOT", archive):
+      with patch.object(PROVENANCE_VERIFIER.subprocess, "run", side_effect=AssertionError("Git invoked for archive")):
+        PROVENANCE_VERIFIER.check_security_backport_preimage(self.commit, self.record)
+
+  def test_archive_inside_another_checkout_ignores_its_history(self):
+    archive = self.repository / "archive"
+    archive.mkdir()
+    with patch.object(PROVENANCE_VERIFIER, "ROOT", archive):
+      with patch.object(PROVENANCE_VERIFIER.subprocess, "run", side_effect=AssertionError("Parent Git history used")):
+        PROVENANCE_VERIFIER.check_security_backport_preimage(self.commit, self.record)
+
+  def test_fresh_clone_after_squash_requires_retained_preimage(self):
+    self.git("checkout", "--quiet", "-b", "feature")
+    (self.repository / "cloudflared.txt").write_text("feature-only metadata\n")
+    self.git("add", ".")
+    self.git("commit", "--quiet", "-m", "PR-only first commit")
+    pr_commit = self.git("rev-parse", "HEAD").stdout.decode().strip()
+    (self.repository / self.path).write_text("patched implementation\n")
+    self.git("add", ".")
+    self.git("commit", "--quiet", "-m", "security backport")
+    self.git("checkout", "--quiet", "main")
+    self.git("merge", "--squash", "feature")
+    self.git("commit", "--quiet", "-m", "squashed PR")
+    clone = self.directory / "fresh-main"
+    self.git("clone", "--quiet", "--no-local", "--single-branch", "--branch", "main",
+             str(self.repository), str(clone), cwd=self.directory)
+    self.assertNotEqual(self.git("cat-file", "-e", f"{pr_commit}^{{commit}}", cwd=clone, check=False).returncode, 0)
+    with patch.object(PROVENANCE_VERIFIER, "ROOT", clone):
+      PROVENANCE_VERIFIER.check_security_backport_preimage(self.commit, self.record)
+      self.assert_rejected(pr_commit, self.record, "commit is unavailable")
 
 
 if __name__ == "__main__":

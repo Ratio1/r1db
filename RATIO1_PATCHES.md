@@ -184,6 +184,13 @@ non-cancellable contexts.
 
 ### Security backports
 
+Security backport preimages refer to commits already retained in `main`, so
+squash-merging a feature branch does not discard their provenance. Repository
+validation requires those commits and paths to resolve and verifies their
+preimage hashes; missing history fails the check. Exported source and Docker
+build contexts omit Git metadata and verify the distributed file hashes, with
+historical preimages enforced by the full-checkout CI and release gates.
+
 - The original Go 1.26.6 refresh addressed `CVE-2026-39821` and
   `CVE-2026-46600`. The engine now uses Go 1.26.10, which also addresses
   `CVE-2026-111943`, `CVE-2026-78667`, `CVE-2026-78669`, and

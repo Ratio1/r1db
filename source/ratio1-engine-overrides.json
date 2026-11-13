@@ -452,7 +452,7 @@
       "module": "golang.org/x/net@v0.56.0",
       "advisory": "CVE-2026-78669",
       "source": "https://github.com/golang/net/commit/cc7d34fd2dd5864bcafe3e5e0a84919240be98c0",
-      "preimageCommit": "b12cfa53e4cfe5fc1929436d42504061cafaff6f",
+      "preimageCommit": "9e488ddbde645b915e65c137c879f1e79551cdac",
       "files": [
         {
           "path": "engine/vendor/golang.org/x/net/http2/flow.go",
@@ -489,7 +489,7 @@
       "module": "golang.org/x/text@v0.39.0",
       "advisory": "CVE-2026-56851",
       "source": "https://github.com/golang/text/commit/02aa981a75cb366b39e71729b935c15a7b4e146a",
-      "preimageCommit": "b12cfa53e4cfe5fc1929436d42504061cafaff6f",
+      "preimageCommit": "9e488ddbde645b915e65c137c879f1e79551cdac",
       "files": [
         {
           "path": "engine/vendor/golang.org/x/text/secure/precis/nickname.go",
