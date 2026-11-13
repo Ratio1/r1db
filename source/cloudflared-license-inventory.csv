@@ -54,7 +54,7 @@ go.opentelemetry.io/otel/trace,https://github.com/open-telemetry/opentelemetry-g
 go.opentelemetry.io/proto/otlp,https://github.com/open-telemetry/opentelemetry-proto-go/blob/bc625d6e040020737ab65c675c87e03bc841fd60/LICENSE,Apache-2.0
 go.uber.org/automaxprocs,https://github.com/uber-go/automaxprocs/blob/1ea14c35ce47a73089b824e504d1c92eeb61a5a6/LICENSE,MIT
 golang.org/x/crypto,https://go.googlesource.com/crypto/+/8fdf07b3114278fb3b78c1cf1814e08bd851eb4c/LICENSE,BSD-3-Clause
-golang.org/x/net,https://go.googlesource.com/net/+/c1d31df183e51b1075a2fd670d6f6f4efb871773/LICENSE,BSD-3-Clause
+golang.org/x/net,https://go.googlesource.com/net/+/3de643db506517b3e652a13cc0b56034cea6b8e6/LICENSE,BSD-3-Clause
 golang.org/x/oauth2,https://go.googlesource.com/oauth2/+/4d954e69a88d9e1ccb8439f8d5b6cbef230c4ef9/LICENSE,BSD-3-Clause
 golang.org/x/sync,https://go.googlesource.com/sync/+/36f2d70ecde9857dc4e363242a1369c7645d6770/LICENSE,BSD-3-Clause
 golang.org/x/sys,https://go.googlesource.com/sys/+/b6b8557e8e2974925aec7a136ba0e323eedc5f43/LICENSE,BSD-3-Clause

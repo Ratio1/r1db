@@ -13,6 +13,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,6 +24,33 @@ LICENSE_ROOT = ROOT / "licenses" / "cloudflared"
 LICENSE_NAMES = {"license", "licence", "copying", "notice", "patents"}
 COMMIT = "35b379ac174d60a4301615defedc821de5625cef"
 MODULE_SOURCES = ROOT / "source/cloudflared-module-sources.json"
+PROVENANCE_INPUT = None  # A disjoint worker may verify a separately emitted Cloudflared object.
+NET_VERSION = "v0.62.0"
+VERSION = "2026.10.6-r1.35b379a.net062"  # Distinguish the reviewed dependency update from upstream builds.
+NET_SUM = "h1:18ELalfM5+XNRwzM2nYqXsZQ9ByS1uhj2O/U7+5jqRY="  # Authenticated Go module proxy checksum.
+NET_GO_MOD_SUM = "h1:WgDCOTH8iwtB66T4/GfI94AHo/hhdb7Hah9NDseQfiI="  # Authenticated module manifest checksum.
+NET_ORIGIN = {  # Immutable origin returned by the trusted proxy for this exact release.
+  "VCS": "git",
+  "URL": "https://go.googlesource.com/net",
+  "Hash": "3de643db506517b3e652a13cc0b56034cea6b8e6",
+  "Ref": "refs/tags/v0.62.0",
+}
+DEPENDENCY_UPDATE = {  # Bind the only permitted source modification to its reviewed before/after bytes.
+  "module": "golang.org/x/net",
+  "fromVersion": "v0.61.0",
+  "toVersion": NET_VERSION,
+  "sourceCommit": COMMIT,
+  "patch": "security/dependency-updates/cloudflared-xnet-0.62.0.patch",
+  "patchSha256": "674b39f17f8acf87383c0923a3283c9505116e7ac74a7396cd1961938e2243d1",
+  "preimageSha256": {
+    "go.mod": "0d4836d7b0b8eb8881170fe5c7b50050c71d4e48d1b501b64c1adebe28e571e3",
+    "go.sum": "704c1f1bc4feb38d82c674cdfc25dac9ac12432976e2f92f27ea0769e53189fc",
+  },
+  "resultSha256": {
+    "go.mod": "415401dc2364150146bcb015ac7f76aea617ab08cf8c86ef2dd1ab49bba4d103",
+    "go.sum": "1ad5bf5edb8d16f427318c309bffbf36069a70a69cd16fb18f44554eb8687de6",
+  },
+}
 EXTERNAL_LICENSES = {
   "github.com/facebookgo/grace": (
     "dependencies/github.com/facebookgo/grace/license",
@@ -42,6 +70,41 @@ def sha256(path: Path) -> str:
   return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def cloudflared_provenance() -> dict:
+  """Read the normal manifest or a separately emitted Cloudflared object."""
+  path = PROVENANCE_INPUT or ROOT / "source/provenance.json"
+  document = json.loads(path.read_text(encoding="utf-8"))
+  return document if PROVENANCE_INPUT else document["buildInputs"]["cloudflared"]
+
+
+def verify_dependency_update(source_root: Path, cloudflared: dict) -> None:
+  """Bind the reviewed patch to exact result and immutable upstream bytes."""
+  if cloudflared.get("dependencyUpdates") != [DEPENDENCY_UPDATE]:  # Reject stale, missing, or widened overrides.
+    fail("Cloudflared dependency update differs from the reviewed x/net upgrade")
+  patch_path = ROOT / DEPENDENCY_UPDATE["patch"]
+  if not patch_path.is_file() or sha256(patch_path) != DEPENDENCY_UPDATE["patchSha256"]:
+    fail("Cloudflared x/net dependency patch is missing or tampered")
+  # Reverse only temporary copies so verification also works against read-only source mounts.
+  with tempfile.TemporaryDirectory(prefix="cloudflared-preimage-") as directory:
+    restored = Path(directory)
+    for name, expected in DEPENDENCY_UPDATE["resultSha256"].items():
+      path = source_root / name
+      if not path.is_file() or sha256(path) != expected:
+        fail(f"Cloudflared dependency update result differs: {name}")
+      retained = ROOT / f"source/cloudflared-{name}"
+      if not retained.is_file() or sha256(retained) != expected:
+        fail(f"Cloudflared retained dependency manifest differs: {name}")
+      shutil.copyfile(path, restored / name)
+    result = subprocess.run(  # Git apply works in an unpacked source archive without repository metadata.
+      ["git", "apply", "--reverse", str(patch_path)], cwd=restored, text=True, capture_output=True,
+    )
+    if result.returncode:
+      fail("Cloudflared dependency patch cannot restore the upstream preimage")
+    for name, expected in DEPENDENCY_UPDATE["preimageSha256"].items():
+      if sha256(restored / name) != expected:  # Check restored bytes even if git reports success.
+        fail(f"Cloudflared dependency update preimage differs: {name}")
+
+
 def is_license_file(path: Path) -> bool:
   return path.name.lower().split(".", 1)[0] in LICENSE_NAMES
 
@@ -50,7 +113,7 @@ def run(command: list[str], cwd: Path) -> str:
   environment = {
     **os.environ,
     "GOPROXY": "off",
-    "GOSUMDB": "off",
+    "GOSUMDB": "sum.golang.org",  # Vendor-only verification needs no downloads; keep checksum authentication enabled.
     "GOFLAGS": "-buildvcs=false",
     "CGO_ENABLED": "0",
     "GOOS": "linux",
@@ -127,6 +190,7 @@ def read_inventory() -> list[dict[str, str]]:
 
 
 def verify_inventory(build_info: str, source_root: Path) -> None:
+  verify_xnet_evidence(build_info, source_root)
   rows = read_inventory()
   packages = {row["package"] for row in rows}
   for module in sorted(module_paths(build_info)):
@@ -228,8 +292,7 @@ def copy_notices(source_root: Path) -> None:
 
 
 def verify_source_hashes(source_root: Path) -> None:
-  provenance = json.loads((ROOT / "source" / "provenance.json").read_text(encoding="utf-8"))
-  cloudflared = provenance["buildInputs"]["cloudflared"]
+  cloudflared = cloudflared_provenance()
   expected = {
     "goModSha256": source_root / "go.mod",
     "goSumSha256": source_root / "go.sum",
@@ -245,8 +308,7 @@ def verify_source_hashes(source_root: Path) -> None:
 
 
 def verify_grpc_security_fix(source_root: Path) -> None:
-  provenance = json.loads((ROOT / "source" / "provenance.json").read_text(encoding="utf-8"))
-  if provenance["buildInputs"]["cloudflared"].get("securityBackports") != []:
+  if cloudflared_provenance().get("securityBackports") != []:
     fail("Cloudflared must use the upstream-fixed dependency")
   modules = (source_root / "vendor/modules.txt").read_text(encoding="utf-8")
   if "# google.golang.org/grpc v1.83.2\n" not in modules:
@@ -258,14 +320,13 @@ def verify_grpc_security_fix(source_root: Path) -> None:
 
 
 def verify_binary(build_info: str, binary: Path) -> None:
-  provenance = json.loads((ROOT / "source" / "provenance.json").read_text(encoding="utf-8"))
-  cloudflared = provenance["buildInputs"]["cloudflared"]
+  cloudflared = cloudflared_provenance()
   if cloudflared.get("binarySha256") != sha256(binary):
     fail("Cloudflared binary hash differs from provenance")
   required = (
     "/cloudflared: go1.27.3",
     "\tdep\tgoogle.golang.org/grpc\tv1.83.2\t",
-    "\tdep\tgolang.org/x/net\tv0.61.0\t",
+    "\tdep\tgolang.org/x/net\tv0.62.0\t",
     "\tdep\tgolang.org/x/text\tv0.43.0\t",
   )
   for marker in required:
@@ -273,16 +334,62 @@ def verify_binary(build_info: str, binary: Path) -> None:
       fail(f"Cloudflared build is missing required metadata: {marker.strip()}")
   if "google.golang.org/grpc\tv1.81.1" in build_info:
     fail("Cloudflared still embeds the vulnerable gRPC version")
+  if cloudflared.get("version") != VERSION:
+    fail("Cloudflared binary version differs from the reviewed dependency update")
+  version = subprocess.check_output([str(binary), "--version"], text=True).strip()  # Trimpath omits ldflags from go version -m.
+  if version != f"cloudflared version {VERSION} (built 2026-10-29-11:55_UTC)":
+    fail("Cloudflared binary version or build time differs from the reviewed build")
+  verify_compiled_xnet(build_info)
+
+
+def verify_compiled_xnet(build_info: str) -> None:
+  """Reject stale, duplicate, or replaced compiled x/net dependencies."""
+  lines = [line.split("\t") for line in build_info.splitlines()]  # Parse whole module records, not substrings.
+  matches = [
+    index for index, fields in enumerate(lines)
+    if len(fields) >= 4 and fields[1:3] == ["dep", "golang.org/x/net"]
+  ]
+  if len(matches) != 1 or lines[matches[0]][3] != NET_VERSION:
+    fail("Cloudflared compiled x/net version differs from v0.62.0")
+  following = lines[matches[0] + 1] if matches[0] + 1 < len(lines) else []
+  if len(following) > 1 and following[1] == "=>":  # Local paths and alternate modules are not approved.
+    fail("Cloudflared compiled x/net must not use a replacement")
+
+
+def verify_xnet_evidence(build_info: str, source_root: Path) -> None:
+  """Bind compiled x/net to vendor, authenticated sums, origin, and license."""
+  verify_compiled_xnet(build_info)
+  modules = (source_root / "vendor/modules.txt").read_text(encoding="utf-8")
+  net_entries = [line for line in modules.splitlines() if line.startswith("# golang.org/x/net ")]  # Include replacement declarations.
+  if net_entries != [f"# golang.org/x/net {NET_VERSION}"]:
+    fail("Cloudflared vendored x/net differs from the approved release")
+  sums = set((source_root / "go.sum").read_text(encoding="utf-8").splitlines())
+  for version, checksum in ((NET_VERSION, NET_SUM), (NET_VERSION + "/go.mod", NET_GO_MOD_SUM)):
+    if f"golang.org/x/net {version} {checksum}" not in sums:  # A module archive alone does not bind its dependency manifest.
+      fail("Cloudflared x/net authenticated go.sum evidence differs")
+  records = json.loads(MODULE_SOURCES.read_text(encoding="utf-8"))
+  record = records.get("golang.org/x/net", {})
+  expected = {  # License bytes are unchanged upstream but their origin commit must advance.
+    "module": "golang.org/x/net", "version": NET_VERSION, "sum": NET_SUM,
+    "goModSum": NET_GO_MOD_SUM, "origin": NET_ORIGIN,
+    "licenseUrl": f"https://go.googlesource.com/net/+/{NET_ORIGIN['Hash']}/LICENSE",
+    "licenseSha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
+  }
+  if record != expected:
+    fail("Cloudflared x/net module, origin, or license evidence differs")
 
 
 def main() -> None:
+  global PROVENANCE_INPUT
   parser = argparse.ArgumentParser()
   parser.add_argument("--source-root", required=True, type=Path)
   parser.add_argument("--binary", required=True, type=Path)
   parser.add_argument("--write", action="store_true")
+  parser.add_argument("--provenance-input", type=Path, help="Read a separate Cloudflared buildInputs object")
   args = parser.parse_args()
   source_root = args.source_root.resolve()
   binary = args.binary.resolve()
+  PROVENANCE_INPUT = args.provenance_input.resolve() if args.provenance_input else None
   if not source_root.is_dir() or not binary.is_file():
     fail("Cloudflared source root or binary is missing")
 
@@ -301,6 +408,7 @@ def main() -> None:
   if PACKAGES.read_text(encoding="utf-8") != packages:
     fail("checked-in Cloudflared compiled package closure is stale")
   verify_source_hashes(source_root)
+  verify_dependency_update(source_root, cloudflared_provenance())
   verify_grpc_security_fix(source_root)
   verify_binary(build_info, binary)
   verify_inventory(build_info, source_root)

@@ -2,3 +2,5 @@
 * -text
 # Go build metadata retains empty trailing checksum fields.
 source/cloudflared-buildinfo.txt whitespace=-blank-at-eol
+# Unified-diff context prefixes a space before the upstream Go manifest tabs.
+security/dependency-updates/*.patch whitespace=-space-before-tab

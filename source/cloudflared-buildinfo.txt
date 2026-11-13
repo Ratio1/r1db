@@ -57,7 +57,7 @@
 	dep	go.opentelemetry.io/proto/otlp	v1.11.0	
 	dep	go.uber.org/automaxprocs	v1.6.0	
 	dep	golang.org/x/crypto	v0.58.0	
-	dep	golang.org/x/net	v0.61.0	
+	dep	golang.org/x/net	v0.62.0	
 	dep	golang.org/x/oauth2	v0.36.0	
 	dep	golang.org/x/sync	v0.24.0	
 	dep	golang.org/x/sys	v0.49.0	

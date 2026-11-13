@@ -64,8 +64,6 @@ EXPECTED_ADDED_FILES = {
   "engine/pkg/util/goschedstats/runtime_go1.26_test.go",
 }
 EXPECTED_SECURITY_BACKPORTS = {
-  "CVE-2026-56851",
-  "CVE-2026-78669",
   "CVE-2026-43871",
   "CVE-2026-84304",
   "GO-2026-4518",
@@ -280,8 +278,8 @@ def check_engine_dependency_snapshot(upstream: dict) -> None:
     "goSumSha256": ROOT / "engine" / "go.sum",
     "vendorModulesSha256": ROOT / "engine" / "vendor" / "modules.txt",
   }
-  if snapshot.get("goVersion") != "1.25.0":
-    fail("engine dependency snapshot must use Go 1.25 language semantics")
+  if snapshot.get("goVersion") != "1.26.0":
+    fail("engine dependency snapshot must use Go 1.26 language semantics")
   for key, path in expected.items():
     if snapshot.get(key) != file_sha256(path):
       fail(f"engine dependency snapshot differs: {key}")

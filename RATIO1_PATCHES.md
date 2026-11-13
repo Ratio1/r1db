@@ -197,19 +197,18 @@ historical preimages enforced by the full-checkout CI and release gates.
   `CVE-2026-97031`. Cloudflared and the atomic replacement helper use the
   separately pinned Go 1.27.3 toolchain. Both toolchains include the applicable
   standard-library fixes.
-- `CVE-2026-78669` / `GO-2026-6611`: the official HTTP/2 flow-control fix from
-  `golang/net` commit `cc7d34fd2dd5864bcafe3e5e0a84919240be98c0` is backported
-  to vendored x/net v0.56.0 in `http2/flow.go`, `server.go`, `transport.go`,
-  and `writesched.go`. Initial-window settings update shared connection state
-  without visiting every stream. Per-stream accounting preserves the required
-  connection and stream overflow errors. `http2/flow_r1_test.go` enforces bounded
-  settings processing and both overflow boundaries.
-- `CVE-2026-56851` / `GO-2026-6629`: the official PRECIS short-buffer fix from
-  `golang/text` commit `02aa981a75cb366b39e71729b935c15a7b4e146a` is backported
-  to vendored x/text v0.39.0 in `secure/precis/nickname.go` and `profile.go`.
-  It bounds nickname writes, handles incomplete UTF-8, and preserves context
-  checks across transformer boundaries. `nickname_r1_test.go` exercises small
-  destination buffers, normalization expansion, spaces, and malformed UTF-8.
+- x/net v0.62.0 is used by both the engine and Cloudflared. It includes the
+  upstream HTTP/2 flow-control fix for `CVE-2026-78669` / `GO-2026-6611` and
+  the HTML parser fix for `CVE-2026-78661` / `GO-2026-6860`. The engine's
+  x/text v0.43.0 includes the PRECIS short-buffer fix for `CVE-2026-56851` /
+  `GO-2026-6629`. The former local x/net and x/text implementation backports
+  and their exact-version VEX decisions are retired. Required engine Go
+  dependencies are upgraded together: x/crypto v0.58.0, x/sys v0.49.0,
+  x/term v0.47.0, and x/sync v0.24.0, using Go 1.26 language semantics.
+  All other engine dependency versions and native components are retained.
+  Cloudflared's checked-in dependency override modifies only go.mod/go.sum;
+  its source preimages, patch, modified hashes, module sums, compiled closure,
+  licenses, and rebuilt binary are verified.
 - `CVE-2026-63209` / `GHSA-259r-337f-4rfw`: the affected
   `github.com/klauspost/compress/s2` dictionary implementation is absent from
   the vendored tree, package manifest, and verified runtime source closure.

@@ -102,16 +102,14 @@ The database engine is built with Go 1.26.10, including fixes for
 `CVE-2026-111943`, `CVE-2026-78667`, `CVE-2026-78669`, and `CVE-2026-97031`.
 Cloudflared and the atomic replacement helper use Go 1.27.3.
 
-`CVE-2026-78669` / `GO-2026-6611` also affects vendored x/net HTTP/2.
-The engine's v0.56.0 source contains the complete flow-control fix from
-`golang/net` commit `cc7d34fd2dd5864bcafe3e5e0a84919240be98c0`. Repeated
-initial-window settings no longer visit every stream; stream and connection
-window-limit errors are preserved. `CVE-2026-56851` / `GO-2026-6629` affects
-PRECIS nickname transforms with short destination buffers. The engine's x/text
-v0.39.0 source contains the complete fix from `golang/text` commit
-`02aa981a75cb366b39e71729b935c15a7b4e146a`. Implementation preimages, resulting
-files, and regressions for both backports are pinned in
-`source/ratio1-engine-overrides.json`. The exact VEX decisions are `fixed`.
+Both the engine and Cloudflared embed x/net v0.62.0, including upstream fixes
+for the HTTP/2 flow-control issue `CVE-2026-78669` / `GO-2026-6611` and the HTML
+parser denial of service `CVE-2026-78661` / `GO-2026-6860`. The engine also uses
+upstream-fixed x/text v0.43.0 for the PRECIS short-buffer issue
+`CVE-2026-56851` / `GO-2026-6629`. These upgrades replace the former local
+x/net and x/text backports and their exact-version VEX decisions. No VEX
+exception suppresses the HTML parser advisory. Module checksums, retained
+source provenance, and the runtime closure remain enforced.
 
 `CVE-2026-63209` / `GHSA-259r-337f-4rfw` affects the S2 dictionary decoder in
 `github.com/klauspost/compress`. The engine's v1.17.8 dependency retains other
@@ -121,15 +119,14 @@ against S2 appearing on disk, in `vendor/modules.txt`, or in the verified
 runtime source closure.
 
 `CVE-2026-56854` / `GO-2026-6303` affects SSH server authentication reached
-through `golang.org/x/crypto/ssh.NewServerConn` before x/crypto v0.55.0. The
-database engine's verified vendored runtime closure contains no x/crypto SSH
-package. Cloudflared now embeds fixed x/crypto v0.58.0, so that binary no longer
-needs this VEX exception. The pinned binary still compiles the SSH package; its
-first-party `sshgen` code uses only `NewPublicKey` and `MarshalAuthorizedKey`.
-The exact pinned source is checked with Go's compiled-package list and AST;
-the gate rejects `NewServerConn`, `ServerConfig`, authentication callbacks,
-dot imports, or any SSH import outside `sshgen`. The exact-version VEX exception
-applies only to the engine's v0.53.0 dependency.
+through `golang.org/x/crypto/ssh.NewServerConn` before x/crypto v0.55.0. Both
+binaries now embed fixed x/crypto v0.58.0, so the former engine VEX exception
+is removed. The engine's verified runtime closure still excludes the SSH
+package. Cloudflared compiles SSH; its first-party `sshgen` code uses only
+`NewPublicKey` and `MarshalAuthorizedKey`. The exact source is checked with
+Go's compiled-package list and AST; the gate rejects `NewServerConn`,
+`ServerConfig`, authentication callbacks, dot imports, or any SSH import
+outside `sshgen`.
 
 The final image is assembled from a tracked minimal root filesystem rather
 than a complete Debian userspace. This removes Perl, gzip, zlib, block-device

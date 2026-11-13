@@ -12,9 +12,9 @@ import importlib.util
 import json
 from pathlib import Path
 import re
-import subprocess
 from urllib.error import HTTPError
-from urllib.request import urlopen
+from urllib.parse import quote  # Encode subdirectory tag names for public GitHub commit lookups.
+from urllib.request import Request, urlopen  # Public API origin fallback must not depend on local gh credentials.
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -75,9 +75,12 @@ def origin(item: dict) -> dict:
       raise ValueError(f"Review immutable module origin: {module}")
     version = item["Version"].removesuffix("+incompatible")
     revision = version.rsplit("-", 1)[-1] if re.search(r"-[0-9a-f]{12}$", version) else f"{subdir}/{version}".lstrip("/")
-    commit = subprocess.check_output(
-      ["gh", "api", f"repos/{repo}/commits/{revision}", "--jq", ".sha"], text=True,
-    ).strip()
+    request = Request(  # Resolve old proxy entries without invoking the authenticated GitHub CLI.
+      f"https://api.github.com/repos/{repo}/commits/{quote(revision, safe='')}",
+      headers={"Accept": "application/vnd.github+json", "User-Agent": "r1db-cloudflared-evidence"},
+    )
+    with urlopen(request, timeout=60) as response:  # The public endpoint returns the immutable full commit.
+      commit = json.load(response).get("sha", "")  # Never trust a tag name as a commit hash.
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
       raise ValueError(f"Invalid module origin commit: {module}")
     result = {"VCS": "git", "URL": f"https://github.com/{repo}", "Hash": commit}
@@ -121,17 +124,23 @@ def main() -> None:
   parser = argparse.ArgumentParser()
   parser.add_argument("--source-root", required=True, type=Path)
   parser.add_argument("--evidence-dir", required=True, type=Path)
+  parser.add_argument("--provenance-output", type=Path, help="Write only the Cloudflared buildInputs object to this path")  # Avoid shared-manifest writes.
   args = parser.parse_args()
   source = args.source_root.resolve()
   evidence = args.evidence_dir.resolve()
   spec = importlib.util.spec_from_file_location("cloud_verifier", ROOT / "scripts/verify-cloudflared-source.py")
   verifier = importlib.util.module_from_spec(spec)
   spec.loader.exec_module(verifier)
+  updates = [verifier.DEPENDENCY_UPDATE]  # Emit the one reviewed mod/sum patch as an explicit source modification.
+  verifier.verify_dependency_update(source, {"dependencyUpdates": updates})  # Reject stale or tampered sources before refreshing notices.
 
   info_lines = (evidence / "buildinfo.txt").read_text().splitlines()
   info_lines[0] = "/cloudflared: " + info_lines[0].partition(": ")[2]
   build_info = "\n".join(info_lines) + "\n"
+  verifier.verify_compiled_xnet(build_info)  # Refuse to refresh evidence for a stale or replaced binary dependency.
   packages = "\n".join(sorted(set((evidence / "compiled-packages.txt").read_text().splitlines()))) + "\n"
+  if "runtime/cgo" in packages.splitlines():  # Package evidence must use the same CGO_ENABLED=0 setting as the executable.
+    raise ValueError("Cloudflared package evidence was collected with cgo enabled")
   needed = verifier.module_paths(build_info) - {"github.com/cloudflare/cloudflared"}
   downloads = {item["Path"]: item for item in objects((evidence / "module-downloads.json").read_text())}
   replacements = {}
@@ -193,6 +202,8 @@ def main() -> None:
       "licenseUrl": url,
       "licenseSha256": digest(license_path),
     }
+    if module == "golang.org/x/net":  # Retain both authenticated checksums for the explicit dependency override.
+      records[module]["goModSum"] = item["GoModSum"]  # Bind the upgraded release's dependency manifest too.
   (ROOT / "source/cloudflared-buildinfo.txt").write_text(build_info)
   (ROOT / "source/cloudflared-compiled-packages.txt").write_text(packages)
   module_sources = ROOT / "source/cloudflared-module-sources.json"
@@ -210,7 +221,7 @@ def main() -> None:
     "sourceArchiveUrl": f"https://github.com/cloudflare/cloudflared/archive/{COMMIT}.tar.gz",
     "sourceArchiveSha256": "ee21af3280b31559b257e40ff6024956c066e3da6fded6810bf2b3e4749c1186",
     "sourceDateEpoch": 1793274907,
-    "version": "2026.10.6-r1.35b379a",
+    "version": verifier.VERSION,  # Mark binaries built from the reviewed dependency patch.
     "binarySha256": digest(evidence / "cloudflared"),
     "goBuilder": "golang:1.27.3-bookworm@sha256:d9b6a1beb9474adc2a1ce842573639b44b2a0dd49b6669f51d3821baf9ec37c9",
     "goModSha256": digest(source / "go.mod"),
@@ -220,9 +231,18 @@ def main() -> None:
     "moduleSources": "source/cloudflared-module-sources.json",
     "moduleSourcesSha256": digest(module_sources),
     "securityBackports": [],
+    "dependencyUpdates": updates,  # Preserve the unchanged upstream source identity alongside the modification.
   })
-  provenance_path.write_text(json.dumps(provenance, indent=2) + "\n")
+  verifier.verify_xnet_evidence(build_info, source)  # Reject mismatched proxy origins, sums, and license evidence before publication.
+  write_provenance(provenance, args.provenance_output)  # An explicit output never rewrites the shared provenance file.
   print(f"Refreshed {len(rows)} license records and {len(packages.splitlines())} compiled packages")
+
+
+def write_provenance(provenance: dict, output: Path | None) -> None:
+  """Write the full manifest by default, or only Cloudflared to an explicit path."""
+  path = output or ROOT / "source/provenance.json"  # Keep normal callers' destination unchanged.
+  document = provenance["buildInputs"]["cloudflared"] if output else provenance  # Limit the disjoint output to its owned object.
+  path.write_text(json.dumps(document, indent=2) + "\n")  # Produce deterministic reviewable JSON with a final newline.
 
 
 if __name__ == "__main__":

@@ -1,7 +1,6 @@
 // Copyright 2015 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
-// Modified by Ratio1 in 2026; see RATIO1_PATCHES.md.
 
 //go:build !(go1.27 && !http2legacy)
 
@@ -28,6 +27,7 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"net/textproto"
+	"slices"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -185,6 +185,8 @@ func (t *Transport) initConnPool() {
 
 // ClientConn is the state of a single HTTP/2 client connection to an
 // HTTP/2 server.
+//
+// Deprecated: Use [http.ClientConn] instead.
 type ClientConn struct {
 	t             *Transport
 	tconn         net.Conn             // usually *tls.Conn, except specialized impls
@@ -200,11 +202,11 @@ type ClientConn struct {
 	idleTimeout time.Duration // or 0 for never
 	idleTimer   *time.Timer
 
-	mu               sync.Mutex  // guards following
-	cond             *sync.Cond  // hold mu; broadcast on flow/closed changes
+	mu               sync.Mutex // guards following
+	cond             *sync.Cond // hold mu; broadcast on flow/closed changes
 	flow             connOutflow // our conn-level flow control quota (cs.outflow is per stream)
-	inflow           inflow      // peer's conn-level flow control
-	doNotReuse       bool        // whether conn is marked to not be reused for any future requests
+	inflow           inflow     // peer's conn-level flow control
+	doNotReuse       bool       // whether conn is marked to not be reused for any future requests
 	closing          bool
 	closed           bool
 	closedOnIdle     bool                     // true if conn was closed for idleness
@@ -2124,18 +2126,42 @@ func (rl *clientConnReadLoop) handleResponse(cs *clientStream, f *MetaHeadersFra
 		return nil, nil
 	}
 
+	// Delete various headers that might mess up framing for HTTP/1. This is
+	// not a problem for HTTP/2, but someone might use HTTP/2 transport as a
+	// reverse proxy which forwards the response to an HTTP/1 client. Our
+	// HTTP/1 client transport will properly reject improper headers such as
+	// multiple conflicting Content-Length headers, but other implementations
+	// might not.
+	// TODO: just reject such responses? We deleted them for compatibility
+	// since this was done in a security fix (go.dev/issue/81115). However,
+	// rejecting them seems entirely reasonable and relatively safe.
+
+	// Connection-specific header fields must not appear in an HTTP/2 message,
+	// and any message containing them is malformed. RFC 9113, Section 8.2.2.
+	for _, k := range connHeaders {
+		delete(res.Header, k)
+	}
 	res.ContentLength = -1
-	if clens := res.Header["Content-Length"]; len(clens) == 1 {
-		if cl, err := strconv.ParseUint(clens[0], 10, 63); err == nil {
-			res.ContentLength = int64(cl)
+	if clens, ok := res.Header["Content-Length"]; ok {
+		// Repeated Content-Length values may be collapsed into one only if
+		// they are identical per RFC 9110 Section 8.6.
+		// No need to trim whitespace, HTTP/2 header values must not have
+		// extraneous whitespace per RFC 9113 Section 8.2.1.
+		// Non-canonical headers are already rejected by our framer at this
+		// point.
+		conflicting := slices.ContainsFunc(clens[1:], func(clen string) bool {
+			return clen != clens[0]
+		})
+		cl, err := strconv.ParseUint(clens[0], 10, 63)
+		if conflicting || err != nil {
+			delete(res.Header, "Content-Length")
 		} else {
-			// TODO: care? unlike http/1, it won't mess up our framing, so it's
-			// more safe smuggling-wise to ignore.
+			res.Header["Content-Length"] = clens[:1]
+			res.ContentLength = int64(cl)
 		}
-	} else if len(clens) > 1 {
-		// TODO: care? unlike http/1, it won't mess up our framing, so it's
-		// more safe smuggling-wise to ignore.
-	} else if f.StreamEnded() && !cs.isHead {
+	}
+
+	if res.ContentLength < 0 && f.StreamEnded() && !cs.isHead {
 		res.ContentLength = 0
 	}
 

@@ -25,10 +25,7 @@ UTIL_LINUX_PURL = (
   "arch=amd64&distro=debian-12.15"
 )
 LIBTINFO_PURL = "pkg:deb/debian/libtinfo6@6.4-4?arch=amd64&distro=debian-12.15"
-X_CRYPTO_PURL = "pkg:golang/golang.org/x/crypto@v0.53.0"
 COMPRESS_PURL = "pkg:golang/github.com/klauspost/compress@v1.17.8"
-X_NET_PURL = "pkg:golang/golang.org/x/net@v0.56.0"
-X_TEXT_PURL = "pkg:golang/golang.org/x/text@v0.39.0"
 GRPC_ENGINE_PURL = "pkg:golang/google.golang.org/grpc@v1.82.1"
 GRPC_CLOUDFLARED_PURL = "pkg:golang/google.golang.org/grpc@v1.83.2"
 REMOTE_PREFIX = "engine/vendor/github.com/prometheus/prometheus/storage/remote/"
@@ -48,72 +45,29 @@ EXPECTED = {
   "CVE-2026-78409": (UTIL_LINUX_PURL, "not_affected", "vulnerable_code_not_present"),
   "CVE-2026-78410": (UTIL_LINUX_PURL, "not_affected", "vulnerable_code_not_present"),
   "CVE-2025-69720": (LIBTINFO_PURL, "not_affected", "vulnerable_code_not_present"),
-  "CVE-2026-56854": (X_CRYPTO_PURL, "not_affected", "vulnerable_code_not_in_execute_path"),
   "CVE-2026-63209": (COMPRESS_PURL, "not_affected", "vulnerable_code_not_present"),
-  "CVE-2026-78669": (X_NET_PURL, "fixed", None),
-  "CVE-2026-56851": (X_TEXT_PURL, "fixed", None),
 }
 REQUIRED_ALIASES = {
   "CVE-2026-43871": {"CVE-2026-43871", "GHSA-8wv5-x4w7-5gww"},
   "CVE-2026-84304": {"CVE-2026-84304", "GHSA-vp52-pcj8-j9qc"},
   "CVE-2026-84445": {"CVE-2026-84445", "GHSA-2v4p-qf9q-27wj"},
-  "CVE-2026-56854": {"CVE-2026-56854", "GO-2026-6303"},
   "CVE-2026-76642": {"CVE-2026-76642", "GHSA-m25x-3hj9-m26f"},
   "CVE-2026-78408": {"CVE-2026-78408", "GHSA-55fx-f4gg-cfhj"},
   "CVE-2026-78409": {"CVE-2026-78409", "GHSA-8f2p-47x3-43mv"},
   "CVE-2026-78410": {"CVE-2026-78410", "GHSA-rh77-686x-2f2m"},
   "CVE-2026-63209": {"CVE-2026-63209", "GHSA-259r-337f-4rfw"},
-  "CVE-2026-78669": {"CVE-2026-78669", "GO-2026-6611"},
-  "CVE-2026-56851": {"CVE-2026-56851", "GO-2026-6629"},
 }
-OCTOBER_PREIMAGE_COMMIT = "9e488ddbde645b915e65c137c879f1e79551cdac"
-OCTOBER_BACKPORTS = {
-  "CVE-2026-78669": {
-    "module": "golang.org/x/net@v0.56.0",
-    "source": "https://github.com/golang/net/commit/cc7d34fd2dd5864bcafe3e5e0a84919240be98c0",
-    "files": {
-      "engine/vendor/golang.org/x/net/http2/flow.go":
-        "cdf7ad077c182118d3967a63d33f0731717b060b43bded46796d226c8fcb11f2",
-      "engine/vendor/golang.org/x/net/http2/server.go":
-        "cf07329cd7d5d95909a5404f3b29f10f4252189012b98ad4c8fdbfca384cb9d1",
-      "engine/vendor/golang.org/x/net/http2/transport.go":
-        "2a9e06b766540b61e7a62333c85ec8956e113e8b37380e0d77e648821d5928fa",
-      "engine/vendor/golang.org/x/net/http2/writesched.go":
-        "c09ff6579f38fac88fab3e925f89de0b40713edd6e941790c6c3deb40a16ea66",
-      "engine/vendor/golang.org/x/net/http2/flow_r1_test.go": None,
-    },
-    "markers": {
-      "flow.go": ("type connOutflow struct", "changeInitialWindowSize", "int64(f.delta)"),
-      "server.go": ("sc.flow.changeInitialWindowSize(int64(val))", "sc.flow.flowErr"),
-      "transport.go": ("cc.flow.changeInitialWindowSize(int64(s.Val))", "cc.goAwayAndClose"),
-      "writesched.go": ("avail, ok := wr.stream.flow.available()",),
-      "flow_r1_test.go": (
-        "TestRatio1InitialWindowSettingsDoNotVisitStreams",
-        "TestRatio1InitialWindowOverflowBlocksEveryStream",
-        "TestRatio1StreamWindowOverflowRemainsStreamScoped",
-      ),
-    },
-  },
-  "CVE-2026-56851": {
-    "module": "golang.org/x/text@v0.39.0",
-    "source": "https://github.com/golang/text/commit/02aa981a75cb366b39e71729b935c15a7b4e146a",
-    "files": {
-      "engine/vendor/golang.org/x/text/secure/precis/nickname.go":
-        "6b0c338af3fe1d23cb00fe726de2068a1ebf3f0fd78eab35bd88eb2fd08130f3",
-      "engine/vendor/golang.org/x/text/secure/precis/profile.go":
-        "cf43411345bd6194604aa3d988c106f3329e1fd8cf9a1775dae3379055be70b2",
-      "engine/vendor/golang.org/x/text/secure/precis/nickname_r1_test.go": None,
-    },
-    "markers": {
-      "nickname.go": ("!utf8.FullRune(src[nSrc:]) && !atEOF", "nDst >= len(dst)", "len(dst)-nDst < size"),
-      "profile.go": ("func (c *checker) Transform(",),
-      "nickname_r1_test.go": (
-        "TestRatio1NicknameShortDestinationBuffers",
-        "TestRatio1NicknamePartialAndInvalidUTF8",
-      ),
-    },
-  },
+# Fixed upstream versions replace the former x/net and x/text source backports.
+# The checksum-backed vendor provenance gate verifies their complete source bytes.
+UPSTREAM_FIXED_MODULES = {
+  "golang.org/x/net": "v0.62.0",
+  "golang.org/x/text": "v0.43.0",
+  "golang.org/x/crypto": "v0.58.0",
+  "golang.org/x/sys": "v0.49.0",
+  "golang.org/x/term": "v0.47.0",
+  "golang.org/x/sync": "v0.24.0",
 }
+RETIRED_ADVISORIES = {"CVE-2026-78669", "CVE-2026-56851", "CVE-2026-56854"}
 
 
 def fail(message: str) -> None:
@@ -189,44 +143,26 @@ def verify_s2_absence() -> None:
     fail("the engine runtime closure unexpectedly includes S2")
 
 
-def verify_october_backport(advisory: str) -> None:
-  expected = OCTOBER_BACKPORTS[advisory]
-  module, version = expected["module"].rsplit("@", 1)
-  verify_exact_engine_module(module, version)
+def verify_upstream_dependency_fixes() -> None:
+  for module, version in UPSTREAM_FIXED_MODULES.items():
+    verify_exact_engine_module(module, version)
   overrides = json.loads((ROOT / "source/ratio1-engine-overrides.json").read_text(encoding="utf-8"))
-  records = [item for item in overrides["securityBackports"] if item.get("advisory") == advisory]
-  if len(records) != 1:
-    fail(f"missing or duplicated security backport: {advisory}")
-  record = records[0]
-  if (
-    record.get("module") != expected["module"]
-    or record.get("source") != expected["source"]
-    or record.get("preimageCommit") != OCTOBER_PREIMAGE_COMMIT
-  ):
-    fail(f"security backport provenance differs: {advisory}")
-  files = record.get("files", [])
-  expected_files = expected["files"]
-  if len(files) != len(expected_files) or {item.get("path") for item in files} != set(expected_files):
-    fail(f"security backport file set differs: {advisory}")
-  runtime_files = set(RUNTIME_FILES.read_text(encoding="utf-8").splitlines())
-  for file_record in files:
-    relative = file_record["path"]
-    preimage = expected_files[relative]
-    change_type = "modified-upstream" if preimage is not None else "ratio1-added"
-    if file_record.get("changeType") != change_type or file_record.get("preimageSha256") != preimage:
-      fail(f"security backport preimage or change type differs: {relative}")
-    path = ROOT / relative
-    digest = file_record.get("sha256", "")
-    if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
-      fail(f"security backport hash is invalid: {relative}")
-    if not path.is_file() or path.is_symlink() or sha256(path) != digest:
-      fail(f"security backport hash differs: {relative}")
-    if preimage is not None and relative.removeprefix("engine/") not in runtime_files:
-      fail(f"security backport implementation is absent from the runtime closure: {relative}")
-    content = path.read_text(encoding="utf-8")
-    for marker in expected["markers"][path.name]:
-      if marker not in content:
-        fail(f"security backport implementation or regression evidence is absent: {relative}: {marker}")
+  for key in ("securityBackports", "dependencyCompatibilityBackports", "generatedVendorFiles"):
+    for record in overrides.get(key, []):
+      module = record.get("module", "").split("@", 1)[0]
+      files = record.get("files", [record])
+      if (
+        module in UPSTREAM_FIXED_MODULES
+        or record.get("advisory") in RETIRED_ADVISORIES
+        or any(
+          item.get("path", "").startswith(f"engine/vendor/{fixed}/")
+          for item in files for fixed in UPSTREAM_FIXED_MODULES
+        )
+      ):
+        fail("upstream-fixed dependencies must not retain local vendor overrides")
+  build_info = (ROOT / "source/cloudflared-buildinfo.txt").read_text(encoding="utf-8")
+  if re.findall(r"(?m)^\tdep\tgolang\.org/x/net\t([^\t]+)\t[^\n]*$", build_info) != ["v0.62.0"]:
+    fail("Cloudflared must embed upstream-fixed x/net v0.62.0")
 
 
 def verify_pgproto_backport() -> None:
@@ -406,10 +342,10 @@ def verify_ssh_server_authentication_absence() -> None:
     fail("the engine unexpectedly distributes the x/crypto/ssh source package")
 
   engine_go_mod = (ROOT / "engine" / "go.mod").read_text(encoding="utf-8")
-  if "\tgolang.org/x/crypto v0.53.0\n" not in engine_go_mod:
+  if "\tgolang.org/x/crypto v0.58.0\n" not in engine_go_mod:
     fail("the engine go.mod x/crypto version differs from the VEX product")
   engine_modules = (ROOT / "engine" / "vendor" / "modules.txt").read_text(encoding="utf-8")
-  if "# golang.org/x/crypto v0.53.0\n" not in engine_modules:
+  if "# golang.org/x/crypto v0.58.0\n" not in engine_modules:
     fail("the engine x/crypto version differs from the VEX product")
   if re.search(r"(?m)^golang\.org/x/crypto/ssh(?:/|$)", engine_modules):
     fail("the engine vendor manifest unexpectedly includes x/crypto/ssh")
@@ -449,9 +385,9 @@ def main() -> None:
   document = json.loads(VEX.read_text(encoding="utf-8"))
   if document.get("@context") != "https://openvex.dev/ns/v0.2.0":
     fail("unexpected OpenVEX context")
-  if document.get("@id") != "https://github.com/Ratio1/r1db/security/vex/10":
+  if document.get("@id") != "https://github.com/Ratio1/r1db/security/vex/11":
     fail("unexpected OpenVEX document identity")
-  if document.get("version") != 10 or document.get("timestamp") != "2026-10-30T00:00:00Z":
+  if document.get("version") != 11 or document.get("timestamp") != "2026-11-13T00:00:00Z":
     fail("unexpected OpenVEX document version or timestamp")
   statements = document.get("statements")
   if not isinstance(statements, list) or len(statements) != len(EXPECTED):
@@ -462,8 +398,7 @@ def main() -> None:
 
   verify_prometheus()
   verify_s2_absence()
-  for advisory in OCTOBER_BACKPORTS:
-    verify_october_backport(advisory)
+  verify_upstream_dependency_fixes()
   verify_pgproto_backport()
   verify_thrift_backport()
   verify_grpc_backport()

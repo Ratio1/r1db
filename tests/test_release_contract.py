@@ -612,7 +612,7 @@ func value() string {
       f'baseline_repository != "{source_url}.git"',
       read("scripts/verify-provenance.py"),
     )
-    self.assertEqual(json.loads(read("security/openvex.json"))["@id"], f"{source_url}/security/vex/10")
+    self.assertEqual(json.loads(read("security/openvex.json"))["@id"], f"{source_url}/security/vex/11")
     self.assertEqual(
       json.loads(read("source/ratio1-engine-overrides.json"))["dependencySnapshot"]
       ["sourceBaseline"]["repository"],
@@ -722,7 +722,7 @@ func value() string {
     )
     self.assertEqual(
       cloudflared["binarySha256"],
-      "af3ba5c4c3618480164c0bf42c0a25ac038fbdcaab69dec13b373a58cbce8322",
+      "c5d7f352ae6036deb65c94dafb64f05e30f47b83ab69cec3cfe37eed36839fd6",
     )
     self.assertEqual(
       provenance["buildInputs"]["releaseTooling"],
@@ -749,7 +749,7 @@ func value() string {
     self.assertEqual(
       {record["advisory"] for record in overrides["securityBackports"]},
       {
-        "CVE-2026-43871", "CVE-2026-84304", "CVE-2026-78669", "CVE-2026-56851",
+        "CVE-2026-43871", "CVE-2026-84304",
         "GO-2026-4518", "GO-2026-5004",
       },
     )
@@ -1025,7 +1025,7 @@ func value() string {
     self.assertIn("google.golang.org/grpc/internal/transport", dockerfile)
     self.assertIn("./pkg/util/ctxutil", dockerfile)
     self.assertIn("./pkg/util/goschedstats", dockerfile)
-    self.assertIn("af3ba5c4c3618480164c0bf42c0a25ac038fbdcaab69dec13b373a58cbce8322", dockerfile)
+    self.assertIn("c5d7f352ae6036deb65c94dafb64f05e30f47b83ab69cec3cfe37eed36839fd6", dockerfile)
     self.assertIn("ADD --checksum=sha256:ee21af3280b31559b257e40ff6024956c066e3da6fded6810bf2b3e4749c1186", dockerfile)
     self.assertNotRegex(lowered, r"from\s+cloudflare/cloudflared")
     self.assertIn("scripts/verify-cloudflared-source.py", dockerfile)
@@ -1765,27 +1765,17 @@ printf '%s' "${FAKE_GITHUB_STATUS}"
         verifier.RUNTIME_FILES = original_engine
         verifier.CLOUDFLARED_PACKAGES = original_cloud
 
-  def test_x_crypto_ssh_vex_excludes_the_server_authentication_path(self):
+  def test_upstream_fixed_x_crypto_retires_vex_and_preserves_ssh_boundaries(self):
     cve = "CVE-2026-56854"
     vex = json.loads(read("security/openvex.json"))
     statements = [
       statement for statement in vex["statements"]
       if statement["vulnerability"]["@id"].endswith(cve)
     ]
-    self.assertEqual(len(statements), 1)
-    self.assertEqual(statements[0]["status"], "not_affected")
-    self.assertEqual(
-      statements[0]["justification"],
-      "vulnerable_code_not_in_execute_path",
-    )
-    self.assertEqual(
-      statements[0]["products"],
-      [{"@id": "pkg:golang/golang.org/x/crypto@v0.53.0"}],
-    )
-    self.assertEqual(
-      set(statements[0]["vulnerability"]["aliases"]),
-      {cve, "GO-2026-6303"},
-    )
+    self.assertEqual(statements, [])
+    self.assertIn("golang.org/x/crypto v0.58.0", read("engine/go.mod"))
+    self.assertIn("# golang.org/x/crypto v0.58.0", read("engine/vendor/modules.txt"))
+    self.assertIn("golang.org/x/crypto\tv0.58.0", read("source/cloudflared-buildinfo.txt"))
 
     cloudflared_verifier = read("scripts/verify-cloudflared-source.py")
     vex_verifier = read("scripts/verify-security-vex.py")

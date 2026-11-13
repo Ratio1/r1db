@@ -3,7 +3,7 @@
 FROM golang:1.27.3-bookworm@sha256:d9b6a1beb9474adc2a1ce842573639b44b2a0dd49b6669f51d3821baf9ec37c9 AS cloudflared-builder
 
 ARG CLOUDFLARED_COMMIT=35b379ac174d60a4301615defedc821de5625cef
-ARG CLOUDFLARED_VERSION=2026.10.6-r1.35b379a
+ARG CLOUDFLARED_VERSION=2026.10.6-r1.35b379a.net062
 
 ENV GOTOOLCHAIN=local
 
@@ -16,6 +16,19 @@ RUN mkdir /cloudflared \
   && rm /tmp/cloudflared.tar.gz
 
 WORKDIR /cloudflared
+
+COPY security/dependency-updates/cloudflared-xnet-0.62.0.patch /tmp/cloudflared-xnet-0.62.0.patch
+RUN printf '%s  %s\n' \
+      '674b39f17f8acf87383c0923a3283c9505116e7ac74a7396cd1961938e2243d1' '/tmp/cloudflared-xnet-0.62.0.patch' \
+      '0d4836d7b0b8eb8881170fe5c7b50050c71d4e48d1b501b64c1adebe28e571e3' 'go.mod' \
+      '704c1f1bc4feb38d82c674cdfc25dac9ac12432976e2f92f27ea0769e53189fc' 'go.sum' \
+    | sha256sum -c - \
+  && git apply --check /tmp/cloudflared-xnet-0.62.0.patch \
+  && git apply /tmp/cloudflared-xnet-0.62.0.patch \
+  && printf '%s  %s\n' \
+      '415401dc2364150146bcb015ac7f76aea617ab08cf8c86ef2dd1ab49bba4d103' 'go.mod' \
+      '1ad5bf5edb8d16f427318c309bffbf36069a70a69cd16fb18f44554eb8687de6' 'go.sum' \
+    | sha256sum -c -
 
 RUN --mount=type=cache,target=/go/pkg/mod \
   go mod download \
@@ -34,7 +47,7 @@ RUN --network=none --mount=type=cache,target=/root/.cache/go-build \
     -ldflags="-s -w -X main.Version=${CLOUDFLARED_VERSION} -X main.BuildTime=2026-10-29-11:55_UTC -X github.com/cloudflare/cloudflared/metrics.Runtime=virtual" \
     -o /out/cloudflared ./cmd/cloudflared \
   && printf '%s  %s\n' \
-      'af3ba5c4c3618480164c0bf42c0a25ac038fbdcaab69dec13b373a58cbce8322' \
+      'c5d7f352ae6036deb65c94dafb64f05e30f47b83ab69cec3cfe37eed36839fd6' \
       '/out/cloudflared' \
     | sha256sum -c -
 
@@ -101,8 +114,6 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     github.com/jackc/pgproto3/v2 \
     github.com/jackc/pgx/v4/internal/sanitize \
     google.golang.org/grpc/internal/transport \
-    golang.org/x/net/http2 \
-    golang.org/x/text/secure/precis \
     ./pkg/util/ctxutil \
     ./pkg/util/goschedstats \
   && go test -vet=off -mod=vendor \
@@ -121,8 +132,10 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
   && cp source/provenance.json source/license-inventory.json \
        source/cloudflared-buildinfo.txt source/cloudflared-license-inventory.csv \
        source/cloudflared-compiled-packages.txt source/cloudflared-module-sources.json \
+       source/cloudflared-go.mod source/cloudflared-go.sum \
        source/vendor-license-manifest.json \
        /out/licenses/source/ \
+  && cp security/dependency-updates/cloudflared-xnet-0.62.0.patch /out/licenses/source/ \
   && cp -a engine/licenses/. /out/licenses/engine/ \
   && cp engine/AUTHORS /out/licenses/engine/AUTHORS \
   && cp engine/c-deps/geos/COPYING /out/licenses/engine/GEOS-COPYING \
