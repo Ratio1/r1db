@@ -7,6 +7,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -34,7 +35,7 @@ type download struct {
 	Version string
 	Dir     string
 	Sum     string
-	Error   *struct{ Err string }
+	Error   string // go mod download -json reports download failures as strings.
 }
 
 type overrideRecord struct {
@@ -165,19 +166,13 @@ func downloadModules(items []module, goBinary string) error {
 	}
 	command := exec.Command(goBinary, append([]string{"mod", "download", "-json"}, targets...)...)
 	command.Env = append(os.Environ(), "GOFLAGS=-mod=mod", "GOTOOLCHAIN=local")
-	stdout, err := command.StdoutPipe()
-	if err != nil {
-		return err
-	}
 	command.Stderr = os.Stderr
-	if err := command.Start(); err != nil {
-		return err
-	}
+	stdout, commandErr := command.Output() // Finish and reap the child before any JSON validation can return early.
 	bySource := map[string]*module{}
 	for index := range items {
 		bySource[items[index].SourcePath+"@"+items[index].SourceVer] = &items[index]
 	}
-	decoder := json.NewDecoder(stdout)
+	decoder := json.NewDecoder(bytes.NewReader(stdout)) // Failed commands can still provide the specific module error in valid JSON.
 	seen := map[string]bool{}
 	for {
 		var record download
@@ -191,8 +186,8 @@ func downloadModules(items []module, goBinary string) error {
 		if item == nil {
 			return fmt.Errorf("unexpected module download: %s", key)
 		}
-		if record.Error != nil {
-			return fmt.Errorf("module download failed for %s: %s", key, record.Error.Err)
+		if record.Error != "" { // Preserve the original download failure instead of reporting a JSON type mismatch.
+			return fmt.Errorf("module download failed for %s: %s", key, record.Error) // Keep the module/version beside its diagnostic.
 		}
 		if record.Dir == "" || record.Sum == "" {
 			return fmt.Errorf("module archive lacks a verified directory or checksum: %s", key)
@@ -200,8 +195,8 @@ func downloadModules(items []module, goBinary string) error {
 		item.Dir, item.Sum = record.Dir, record.Sum
 		seen[key] = true
 	}
-	if err := command.Wait(); err != nil {
-		return err
+	if commandErr != nil { // A valid-looking record stream cannot turn a failed subprocess into success.
+		return commandErr // Output already waited for the child on every decode and validation path.
 	}
 	if len(seen) != len(bySource) {
 		return fmt.Errorf("downloaded %d of %d unique module archives", len(seen), len(bySource))
