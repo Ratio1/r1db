@@ -1201,6 +1201,24 @@ func value() string {
           floating.append(f"{path.name}: {line.strip()}")
     self.assertEqual(floating, [], f"workflow actions must be commit-pinned: {floating}")
 
+  def test_vendor_authentication_runs_before_build_in_both_workflows(self):
+    for name in ("ci", "release"):
+      with self.subTest(workflow=name):
+        workflow = read(f".github/workflows/{name}.yml")  # Inspect both paths that can produce a candidate image.
+        start = workflow.index("- name: Verify every vendored file against checksum-backed modules")  # Require the full gate, not only a mention in a comment.
+        end = workflow.find("\n      - name:", start + 1)  # Bound assertions to that gate's own command block.
+        gate = workflow[start:end if end != -1 else None]  # Prevent another step from supplying missing security options.
+        for expected in (
+          "GOPROXY=https://proxy.golang.org", "GOSUMDB=sum.golang.org", "GOTOOLCHAIN=local",
+          "golang:1.26.10-bookworm@sha256:23ce71337b726608afb1bc00986e630a05034a87a87ea1fc2cd1ae5cf33387eb",
+          "go test -count=1", "scripts/verify-vendor-provenance_test.go",
+          "go run ./scripts/verify-vendor-provenance.go",
+        ):
+          self.assertIn(expected, gate)  # Keep regressions and authenticated archive checks on the same pinned toolchain.
+        self.assertNotIn("continue-on-error", gate)  # A failed download or provenance mismatch must still block publication.
+        self.assertNotIn("GOSUMDB=off", gate)  # Offline unit fixtures must not weaken the real authentication command.
+        self.assertLess(start, workflow.index("uses: docker/build-push-action@"))  # Fail before building a candidate from unverified files.
+
   def test_stable_promotion_requires_an_exact_verified_published_release(self):
     promotion = read(".github/workflows/promote-stable.yml")
     self.assertIn("name: Promote stable image", promotion)
