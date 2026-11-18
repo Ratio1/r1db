@@ -7182,6 +7182,7 @@ vendor/golang.org/x/net/idna/tables15.0.0.go
 vendor/golang.org/x/net/idna/trie.go
 vendor/golang.org/x/net/idna/trieval.go
 vendor/golang.org/x/net/internal/httpcommon/ascii.go
+vendor/golang.org/x/net/internal/httpcommon/gzip.go
 vendor/golang.org/x/net/internal/httpcommon/headermap.go
 vendor/golang.org/x/net/internal/httpcommon/request.go
 vendor/golang.org/x/net/internal/httpsfv/httpsfv.go

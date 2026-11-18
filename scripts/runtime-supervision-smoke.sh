@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-base_image="${1:-ghcr.io/ratio1/deeploy-cockroachdb-service:main}"
+base_image="${1:-ghcr.io/ratio1/r1db:stable}"
 expectation="${2:-fixed}"
 broken_base_image="${CRDB_BROKEN_BASE_IMAGE:-ghcr.io/ratio1/deeploy-cockroachdb-service@sha256:1c082541525f2ec73b07286f9773c5069f70c959c9e67f4a5e1d5200688a1ebe}"
 case "${expectation}" in
@@ -151,8 +151,10 @@ wait_for_log() {
   local expected="$2"
   local timeout_seconds="${3:-60}"
   local deadline=$(( $(date +%s) + timeout_seconds ))
+  local logs=""
   while true; do
-    if docker logs "${name}" 2>&1 | grep -Fq "${expected}"; then
+    # Drain Docker's output before matching so grep cannot cause SIGPIPE.
+    if logs="$(docker logs "${name}" 2>&1)" && grep -Fq "${expected}" <<< "${logs}"; then
       return 0
     fi
     if [[ "$(docker inspect -f '{{.State.Running}}' "${name}" 2>/dev/null || true)" != "true" ]]; then
@@ -161,9 +163,13 @@ wait_for_log() {
     [[ "$(date +%s)" -lt "${deadline}" ]] || break
     sleep 0.25
   done
+  # The final message may arrive between the previous snapshot and exit check.
+  if logs="$(docker logs "${name}" 2>&1)" && grep -Fq "${expected}" <<< "${logs}"; then
+    return 0
+  fi
   docker inspect "${name}" --format '{{json .State}}' >&2 2>/dev/null || true
   docker top "${name}" -eo pid,ppid,pgid,stat,args >&2 2>/dev/null || true
-  docker logs "${name}" >&2 2>/dev/null || true
+  printf '%s\n' "${logs}" >&2
   echo "timed out waiting for log '${expected}' in ${name}" >&2
   return 1
 }

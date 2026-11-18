@@ -127,7 +127,7 @@ enterprise workloads/assets remains in `engine/pkg/cli/cli.go` and
 
 ### Dependency snapshot and neutral direct build
 
-The retained runtime dependency snapshot is refreshed for the pinned Go 1.26.6
+The retained runtime dependency snapshot is refreshed for the pinned Go 1.26.10
 toolchain. `engine/go.mod`, `engine/go.sum`, and
 `engine/vendor/modules.txt` are hash-pinned in `source/provenance.json` and
 `source/ratio1-engine-overrides.json`; every vendored file remains covered by
@@ -154,7 +154,7 @@ part of the checksum-backed upstream module archive.
 
 `scripts/build-engine.sh` replaces the omitted mixed-tree Make/Bazel entrypoints.
 It builds the four checked-in native dependencies and then compiles only
-`pkg/cmd/cockroach-oss` with Go 1.26.6, `GOPROXY=off`, `-mod=vendor`, a fixed
+`pkg/cmd/cockroach-oss` with Go 1.26.10, `GOPROXY=off`, `-mod=vendor`, a fixed
 source timestamp, and deterministic Ratio1 build metadata. It preserves the
 upstream commit as `Build Commit ID` and requires all of:
 
@@ -184,10 +184,36 @@ non-cancellable contexts.
 
 ### Security backports
 
-- `CVE-2026-39821` and `CVE-2026-46600`: all Go runtime binaries are rebuilt
-  with Go 1.26.6 instead of Go 1.26.5. The patch release supplies the standard
-  library fixes used by the database, Cloudflared, and the atomic replacement
-  helper without changing their source-level behavior.
+Security backport preimages refer to commits already retained in `main`, so
+squash-merging a feature branch does not discard their provenance. Repository
+validation requires those commits and paths to resolve and verifies their
+preimage hashes; missing history fails the check. Exported source and Docker
+build contexts omit Git metadata and verify the distributed file hashes, with
+historical preimages enforced by the full-checkout CI and release gates.
+
+- The original Go 1.26.6 refresh addressed `CVE-2026-39821` and
+  `CVE-2026-46600`. The engine now uses Go 1.26.10, which also addresses
+  `CVE-2026-111943`, `CVE-2026-78667`, `CVE-2026-78669`, and
+  `CVE-2026-97031`. Cloudflared and the atomic replacement helper use the
+  separately pinned Go 1.27.3 toolchain. Both toolchains include the applicable
+  standard-library fixes.
+- x/net v0.62.0 is used by both the engine and Cloudflared. It includes the
+  upstream HTTP/2 flow-control fix for `CVE-2026-78669` / `GO-2026-6611` and
+  the HTML parser fix for `CVE-2026-78661` / `GO-2026-6860`. The engine's
+  x/text v0.43.0 includes the PRECIS short-buffer fix for `CVE-2026-56851` /
+  `GO-2026-6629`. The former local x/net and x/text implementation backports
+  and their exact-version VEX decisions are retired. Required engine Go
+  dependencies are upgraded together: x/crypto v0.58.0, x/sys v0.49.0,
+  x/term v0.47.0, and x/sync v0.24.0, using Go 1.26 language semantics.
+  All other engine dependency versions and native components are retained.
+  Cloudflared's checked-in dependency override modifies only go.mod/go.sum;
+  its source preimages, patch, modified hashes, module sums, compiled closure,
+  licenses, and rebuilt binary are verified.
+- `CVE-2026-63209` / `GHSA-259r-337f-4rfw`: the affected
+  `github.com/klauspost/compress/s2` dictionary implementation is absent from
+  the vendored tree, package manifest, and verified runtime source closure.
+  The exact-version `not_affected` VEX decision has guards for all three;
+  unrelated compression implementations are retained.
 - `GO-2026-4518`: `engine/vendor/github.com/jackc/pgproto3/v2/data_row.go`
   rejects negative non-null field lengths. The regression is in
   `data_row_r1_test.go` and covers direct decoding plus a complete frontend
@@ -206,7 +232,7 @@ non-cancellable contexts.
   commit `d5152211af61f850ec393604316804096dd4632e`.
 - `CVE-2026-84304`: the official gRPC-Go receive-buffer compaction fix from
   commit `8cfeca0e1ee5ea0980dcc320e20240fa1079ec77` is backported to the engine's
-  vendored v1.82.1 source and Cloudflared's vendored v1.83.0 source. The engine
+  vendored v1.82.1 source. The engine
   changes are hash-pinned at:
   - `engine/vendor/google.golang.org/grpc/internal/envconfig/envconfig.go`
   - `engine/vendor/google.golang.org/grpc/internal/mem/buffer_pool.go`
@@ -217,9 +243,7 @@ non-cancellable contexts.
   - `engine/vendor/google.golang.org/grpc/mem/buffer_pool.go`
   - `engine/vendor/google.golang.org/grpc/mem/buffers.go`
   - `engine/vendor/google.golang.org/grpc/internal/transport/recv_buffer_compaction_r1_test.go`
-  Cloudflared applies the exact v1.83.0 patch in
-  `security/backports/grpc-go-cve-2026-84304-v1.83.0.patch` before its tests and
-  reproducible build. The regression bounds fragmented receive backlogs to a
+  Cloudflared now uses upstream-fixed gRPC v1.83.2. The regression bounds fragmented receive backlogs to a
   pooled compacted buffer instead of retaining one heap object per DATA frame.
 
 ## Ratio1 Runtime Layer
@@ -275,15 +299,18 @@ operation is no longer supported.
 ## Release Layer
 
 - Uses digest-pinned neutral Go and Debian images.
+- Retains the Go builder's digest-pinned CA bundle rather than downgrading it
+  to the older runtime bundle during native build-tool installation.
 - Builds Cloudflared from exact source commit
-  `b4f47e2ab538ab6e31d3dc6adc5489455ad446de` and a checksum-pinned source
-  archive, applies the hash-pinned `CVE-2026-84304` gRPC backport, then enforces
-  the reviewed reproducible binary hash. Its focused command, carrier, and
-  tunnel RPC tests run during the image build.
+  `35b379ac174d60a4301615defedc821de5625cef` (2026.10.6) and a checksum-pinned
+  source archive, vendors dependencies against the upstream module sums, and
+  enforces the reviewed reproducible binary hash. It uses a separate pinned
+  Go 1.27.3 builder and upstream-fixed gRPC 1.83.2. Its focused command, carrier,
+  and tunnel RPC tests run offline during the image build.
 - Resolves Debian packages from a dated snapshot and pins direct package
   versions.
-- Pins the runtime root filesystem to the 2026-09-24 snapshot and installs
-  Debian's fixed `libpcre2-8-0=10.42-1+deb12u1` package; the matching `pcre2`
+- Pins the runtime root filesystem to the 2026-10-04 snapshot and installs
+  Debian's fixed `libpcre2-8-0=10.42-1+deb12u2` package; the matching `pcre2`
   source package remains part of the corresponding-source archive.
 - Accompanies retained Debian object code with exact binary-to-source mappings,
   `.dsc` files, and source archives from that snapshot, both inside the image

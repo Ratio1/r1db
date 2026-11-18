@@ -25,9 +25,9 @@ UTIL_LINUX_PURL = (
   "arch=amd64&distro=debian-12.15"
 )
 LIBTINFO_PURL = "pkg:deb/debian/libtinfo6@6.4-4?arch=amd64&distro=debian-12.15"
-X_CRYPTO_PURL = "pkg:golang/golang.org/x/crypto@v0.53.0"
+COMPRESS_PURL = "pkg:golang/github.com/klauspost/compress@v1.17.8"
 GRPC_ENGINE_PURL = "pkg:golang/google.golang.org/grpc@v1.82.1"
-GRPC_CLOUDFLARED_PURL = "pkg:golang/google.golang.org/grpc@v1.83.0"
+GRPC_CLOUDFLARED_PURL = "pkg:golang/google.golang.org/grpc@v1.83.2"
 REMOTE_PREFIX = "engine/vendor/github.com/prometheus/prometheus/storage/remote/"
 
 EXPECTED = {
@@ -45,18 +45,29 @@ EXPECTED = {
   "CVE-2026-78409": (UTIL_LINUX_PURL, "not_affected", "vulnerable_code_not_present"),
   "CVE-2026-78410": (UTIL_LINUX_PURL, "not_affected", "vulnerable_code_not_present"),
   "CVE-2025-69720": (LIBTINFO_PURL, "not_affected", "vulnerable_code_not_present"),
-  "CVE-2026-56854": (X_CRYPTO_PURL, "not_affected", "vulnerable_code_not_in_execute_path"),
+  "CVE-2026-63209": (COMPRESS_PURL, "not_affected", "vulnerable_code_not_present"),
 }
 REQUIRED_ALIASES = {
   "CVE-2026-43871": {"CVE-2026-43871", "GHSA-8wv5-x4w7-5gww"},
   "CVE-2026-84304": {"CVE-2026-84304", "GHSA-vp52-pcj8-j9qc"},
   "CVE-2026-84445": {"CVE-2026-84445", "GHSA-2v4p-qf9q-27wj"},
-  "CVE-2026-56854": {"CVE-2026-56854", "GO-2026-6303"},
   "CVE-2026-76642": {"CVE-2026-76642", "GHSA-m25x-3hj9-m26f"},
   "CVE-2026-78408": {"CVE-2026-78408", "GHSA-55fx-f4gg-cfhj"},
   "CVE-2026-78409": {"CVE-2026-78409", "GHSA-8f2p-47x3-43mv"},
   "CVE-2026-78410": {"CVE-2026-78410", "GHSA-rh77-686x-2f2m"},
+  "CVE-2026-63209": {"CVE-2026-63209", "GHSA-259r-337f-4rfw"},
 }
+# Fixed upstream versions replace the former x/net and x/text source backports.
+# The checksum-backed vendor provenance gate verifies their complete source bytes.
+UPSTREAM_FIXED_MODULES = {
+  "golang.org/x/net": "v0.62.0",
+  "golang.org/x/text": "v0.43.0",
+  "golang.org/x/crypto": "v0.58.0",
+  "golang.org/x/sys": "v0.49.0",
+  "golang.org/x/term": "v0.47.0",
+  "golang.org/x/sync": "v0.24.0",
+}
+RETIRED_ADVISORIES = {"CVE-2026-78669", "CVE-2026-56851", "CVE-2026-56854"}
 
 
 def fail(message: str) -> None:
@@ -99,6 +110,59 @@ def verify_prometheus() -> None:
   expected = "# github.com/prometheus/prometheus v1.8.2-0.20210914090109-37468d88dce8"
   if expected not in module_record:
     fail("Prometheus dependency version differs from the VEX product")
+
+
+def verify_exact_engine_module(module: str, version: str) -> None:
+  go_mod = (ROOT / "engine/go.mod").read_text(encoding="utf-8")
+  selected = re.findall(
+    rf"(?m)^[ \t]*{re.escape(module)}[ \t]+(v[^\s]+)(?:[ \t]+//[^\n]*)?[ \t]*$",
+    go_mod,
+  )
+  modules = (ROOT / "engine/vendor/modules.txt").read_text(encoding="utf-8")
+  vendored = re.findall(rf"(?m)^# {re.escape(module)} ([^\n]+)$", modules)
+  if selected != [version] or vendored != [version]:
+    fail(f"engine module version differs from the VEX product: {module}@{version}")
+
+
+def verify_s2_absence() -> None:
+  verify_exact_engine_module("github.com/klauspost/compress", "v1.17.8")
+  package = "github.com/klauspost/compress/s2"
+  source = ROOT / "engine/vendor" / package
+  if source.exists() or source.is_symlink():
+    fail("the engine unexpectedly distributes the vulnerable S2 package")
+  modules = (ROOT / "engine/vendor/modules.txt").read_text(encoding="utf-8")
+  if re.search(rf"(?m)^(?:# )?{re.escape(package)}(?:[/ \t]|$)", modules):
+    fail("the engine vendor manifest unexpectedly includes S2")
+  prefix = f"vendor/{package}"
+  runtime_files = RUNTIME_FILES.read_text(encoding="utf-8").splitlines()
+  if any(
+    path.removeprefix("engine/") == prefix
+    or path.removeprefix("engine/").startswith(prefix + "/")
+    for path in runtime_files
+  ):
+    fail("the engine runtime closure unexpectedly includes S2")
+
+
+def verify_upstream_dependency_fixes() -> None:
+  for module, version in UPSTREAM_FIXED_MODULES.items():
+    verify_exact_engine_module(module, version)
+  overrides = json.loads((ROOT / "source/ratio1-engine-overrides.json").read_text(encoding="utf-8"))
+  for key in ("securityBackports", "dependencyCompatibilityBackports", "generatedVendorFiles"):
+    for record in overrides.get(key, []):
+      module = record.get("module", "").split("@", 1)[0]
+      files = record.get("files", [record])
+      if (
+        module in UPSTREAM_FIXED_MODULES
+        or record.get("advisory") in RETIRED_ADVISORIES
+        or any(
+          item.get("path", "").startswith(f"engine/vendor/{fixed}/")
+          for item in files for fixed in UPSTREAM_FIXED_MODULES
+        )
+      ):
+        fail("upstream-fixed dependencies must not retain local vendor overrides")
+  build_info = (ROOT / "source/cloudflared-buildinfo.txt").read_text(encoding="utf-8")
+  if re.findall(r"(?m)^\tdep\tgolang\.org/x/net\t([^\t]+)\t[^\n]*$", build_info) != ["v0.62.0"]:
+    fail("Cloudflared must embed upstream-fixed x/net v0.62.0")
 
 
 def verify_pgproto_backport() -> None:
@@ -199,21 +263,18 @@ def verify_grpc_backport() -> None:
   provenance = json.loads((ROOT / "source/provenance.json").read_text(encoding="utf-8"))
   cloudflared = provenance["buildInputs"]["cloudflared"]
   cloud_records = cloudflared.get("securityBackports", [])
-  if len(cloud_records) != 1 or cloud_records[0].get("module") != "google.golang.org/grpc@v1.83.0":
-    fail("Cloudflared gRPC backport metadata differs from the VEX product")
-  patch = ROOT / cloud_records[0].get("patch", "")
-  if not patch.is_file() or sha256(patch) != cloud_records[0].get("patchSha256"):
-    fail("Cloudflared gRPC backport patch hash differs")
+  if cloud_records != []:
+    fail("Cloudflared must use the upstream-fixed gRPC dependency")
   cloudflared_build = (ROOT / "source/cloudflared-buildinfo.txt").read_text(encoding="utf-8")
-  if "\tdep\tgoogle.golang.org/grpc\tv1.83.0\t\n" not in cloudflared_build:
+  if "\tdep\tgoogle.golang.org/grpc\tv1.83.2\t\n" not in cloudflared_build:
     fail("Cloudflared gRPC version differs from the VEX product")
   dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
-  for marker in (cloud_records[0]["patch"], cloud_records[0]["patchSha256"], "git -C /cloudflared apply"):
+  for marker in ("go mod verify", "go mod vendor", "RUN --network=none"):
     if marker not in dockerfile:
-      fail(f"Cloudflared gRPC backport is not enforced by the image build: {marker}")
+      fail(f"Cloudflared verified dependency build is not enforced: {marker}")
   cloud_verifier = (ROOT / "scripts/verify-cloudflared-source.py").read_text(encoding="utf-8")
-  if "verify_grpc_security_backport" not in cloud_verifier:
-    fail("Cloudflared source verifier does not enforce the gRPC backport")
+  if "verify_grpc_security_fix" not in cloud_verifier:
+    fail("Cloudflared source verifier does not enforce the upstream gRPC fix")
 
 
 def verify_grpc_xds_absence() -> None:
@@ -241,10 +302,10 @@ def verify_minimal_runtime() -> None:
     fail("minimal runtime package inventory does not match the VEX evidence")
   if "util-linux=2.38.1-5+deb12u3" not in runtime_packages:
     fail("util-linux version differs from the VEX product")
-  if "libpcre2-8-0=10.42-1+deb12u1" not in runtime_packages:
+  if "libpcre2-8-0=10.42-1+deb12u2" not in runtime_packages:
     fail("the runtime PCRE2 security update is missing")
   source_mapping = (ROOT / "source/runtime-package-sources.tsv").read_text(encoding="utf-8")
-  if "libpcre2-8-0\t10.42-1+deb12u1\tpcre2\t10.42-1+deb12u1\n" not in source_mapping:
+  if "libpcre2-8-0\t10.42-1+deb12u2\tpcre2\t10.42-1+deb12u2\n" not in source_mapping:
     fail("the fixed PCRE2 corresponding-source mapping differs")
   assembler = (ROOT / "scripts/assemble-runtime-rootfs.sh").read_text(encoding="utf-8")
   if "/usr/bin/setsid" not in assembler:
@@ -264,9 +325,9 @@ def verify_minimal_runtime() -> None:
   dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
   provenance = json.loads((ROOT / "source/provenance.json").read_text(encoding="utf-8"))
   snapshot = provenance["buildInputs"].get("runtimeDebianSnapshot")
-  if snapshot != "20260924T000000Z" or dockerfile.count(f"/20260924T000000Z") != 4:
+  if snapshot != "20261004T000000Z" or dockerfile.count(f"/20261004T000000Z") != 4:
     fail("the fixed PCRE2 runtime snapshot differs")
-  if "libpcre2-8-0=10.42-1+deb12u1" not in dockerfile:
+  if "libpcre2-8-0=10.42-1+deb12u2" not in dockerfile:
     fail("the fixed PCRE2 package is not installed in the runtime builder")
   if not re.search(r"(?m)^FROM scratch$", dockerfile):
     fail("final runtime is not the reviewed scratch closure")
@@ -281,10 +342,10 @@ def verify_ssh_server_authentication_absence() -> None:
     fail("the engine unexpectedly distributes the x/crypto/ssh source package")
 
   engine_go_mod = (ROOT / "engine" / "go.mod").read_text(encoding="utf-8")
-  if "\tgolang.org/x/crypto v0.53.0\n" not in engine_go_mod:
+  if "\tgolang.org/x/crypto v0.58.0\n" not in engine_go_mod:
     fail("the engine go.mod x/crypto version differs from the VEX product")
   engine_modules = (ROOT / "engine" / "vendor" / "modules.txt").read_text(encoding="utf-8")
-  if "# golang.org/x/crypto v0.53.0\n" not in engine_modules:
+  if "# golang.org/x/crypto v0.58.0\n" not in engine_modules:
     fail("the engine x/crypto version differs from the VEX product")
   if re.search(r"(?m)^golang\.org/x/crypto/ssh(?:/|$)", engine_modules):
     fail("the engine vendor manifest unexpectedly includes x/crypto/ssh")
@@ -294,8 +355,8 @@ def verify_ssh_server_authentication_absence() -> None:
     fail("the engine runtime closure unexpectedly includes x/crypto/ssh")
 
   cloudflared_build = (ROOT / "source" / "cloudflared-buildinfo.txt").read_text(encoding="utf-8")
-  if "\tdep\tgolang.org/x/crypto\tv0.53.0\t\n" not in cloudflared_build:
-    fail("the Cloudflared x/crypto version differs from the VEX product")
+  if "\tdep\tgolang.org/x/crypto\tv0.58.0\t\n" not in cloudflared_build:
+    fail("Cloudflared does not select the reviewed fixed x/crypto version")
   cloudflared_packages = set(
     (ROOT / "source" / "cloudflared-compiled-packages.txt").read_text(encoding="utf-8").splitlines()
   )
@@ -324,9 +385,9 @@ def main() -> None:
   document = json.loads(VEX.read_text(encoding="utf-8"))
   if document.get("@context") != "https://openvex.dev/ns/v0.2.0":
     fail("unexpected OpenVEX context")
-  if document.get("@id") != "https://github.com/Ratio1/r1db/security/vex/8":
+  if document.get("@id") != "https://github.com/Ratio1/r1db/security/vex/11":
     fail("unexpected OpenVEX document identity")
-  if document.get("version") != 8 or document.get("timestamp") != "2026-09-24T00:00:00Z":
+  if document.get("version") != 11 or document.get("timestamp") != "2026-11-13T00:00:00Z":
     fail("unexpected OpenVEX document version or timestamp")
   statements = document.get("statements")
   if not isinstance(statements, list) or len(statements) != len(EXPECTED):
@@ -336,6 +397,8 @@ def main() -> None:
     fail("VEX decisions are missing or duplicated")
 
   verify_prometheus()
+  verify_s2_absence()
+  verify_upstream_dependency_fixes()
   verify_pgproto_backport()
   verify_thrift_backport()
   verify_grpc_backport()

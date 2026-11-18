@@ -80,12 +80,12 @@ patched source, and boundary regressions are hash-pinned in
 
 `CVE-2026-84304` / `GHSA-vp52-pcj8-j9qc` permits unauthenticated HTTP/2 DATA
 frame fragmentation to retain excessive heap objects in gRPC-Go servers. The
-database engine embeds gRPC v1.82.1 and Cloudflared embeds v1.83.0, so both are
-treated as affected. R1DB backports the official v1.83.1 receive-buffer
-compaction fix from commit `8cfeca0e1ee5ea0980dcc320e20240fa1079ec77` to both
-source trees. Engine preimage, result, and regression hashes are enforced by
-`source/ratio1-engine-overrides.json`; Cloudflared patch, preimage, result, and
-binary hashes are enforced by `source/provenance.json` and
+database engine embeds gRPC v1.82.1 with the official v1.83.1 receive-buffer
+compaction backport from commit `8cfeca0e1ee5ea0980dcc320e20240fa1079ec77`.
+Cloudflared embeds upstream-fixed gRPC v1.83.2. Engine preimage, result, and
+regression hashes are enforced by `source/ratio1-engine-overrides.json`;
+Cloudflared module sums, fixed-source markers, and binary hashes are enforced by
+`source/provenance.json` and
 `scripts/verify-cloudflared-source.py`. The exact VEX decision is `fixed` for
 both scanner-visible module versions.
 
@@ -98,16 +98,35 @@ The exact-version VEX decision is `not_affected` because the vulnerable server
 implementation is absent from both binaries. The VEX gate rejects either
 package entering those closures.
 
+The database engine is built with Go 1.26.10, including fixes for
+`CVE-2026-111943`, `CVE-2026-78667`, `CVE-2026-78669`, and `CVE-2026-97031`.
+Cloudflared and the atomic replacement helper use Go 1.27.3.
+
+Both the engine and Cloudflared embed x/net v0.62.0, including upstream fixes
+for the HTTP/2 flow-control issue `CVE-2026-78669` / `GO-2026-6611` and the HTML
+parser denial of service `CVE-2026-78661` / `GO-2026-6860`. The engine also uses
+upstream-fixed x/text v0.43.0 for the PRECIS short-buffer issue
+`CVE-2026-56851` / `GO-2026-6629`. These upgrades replace the former local
+x/net and x/text backports and their exact-version VEX decisions. No VEX
+exception suppresses the HTML parser advisory. Module checksums, retained
+source provenance, and the runtime closure remain enforced.
+
+`CVE-2026-63209` / `GHSA-259r-337f-4rfw` affects the S2 dictionary decoder in
+`github.com/klauspost/compress`. The engine's v1.17.8 dependency retains other
+compression packages, but contains no `github.com/klauspost/compress/s2` source
+or compiled package. The exact-version `not_affected` VEX decision is guarded
+against S2 appearing on disk, in `vendor/modules.txt`, or in the verified
+runtime source closure.
+
 `CVE-2026-56854` / `GO-2026-6303` affects SSH server authentication reached
-through `golang.org/x/crypto/ssh.NewServerConn` before x/crypto v0.55.0. The
-database engine's verified vendored runtime closure contains no x/crypto SSH
-package. The pinned Cloudflared binary does compile that package, but its
-first-party `sshgen` code uses only `NewPublicKey` and `MarshalAuthorizedKey`.
-The exact pinned source is checked with Go's compiled-package list and AST;
-the gate rejects `NewServerConn`, `ServerConfig`, authentication callbacks,
-dot imports, or any SSH import outside `sshgen`. A future upstream Cloudflared
-pin should move to x/crypto v0.55.0 or newer, at which point this VEX exception
-must be removed.
+through `golang.org/x/crypto/ssh.NewServerConn` before x/crypto v0.55.0. Both
+binaries now embed fixed x/crypto v0.58.0, so the former engine VEX exception
+is removed. The engine's verified runtime closure still excludes the SSH
+package. Cloudflared compiles SSH; its first-party `sshgen` code uses only
+`NewPublicKey` and `MarshalAuthorizedKey`. The exact source is checked with
+Go's compiled-package list and AST; the gate rejects `NewServerConn`,
+`ServerConfig`, authentication callbacks, dot imports, or any SSH import
+outside `sshgen`.
 
 The final image is assembled from a tracked minimal root filesystem rather
 than a complete Debian userspace. This removes Perl, gzip, zlib, block-device
@@ -116,8 +135,9 @@ retaining Debian package metadata and copyright files for every copied OS
 component.
 
 The retained `libpcre2-8-0` runtime library is updated to Debian's fixed
-`10.42-1+deb12u1` build for `CVE-2026-86145`, `CVE-2026-89157`, and
-`CVE-2026-89161`. The runtime builder pins the 2026-09-24 Debian snapshot and
+`10.42-1+deb12u2` build for `CVE-2026-86145`, `CVE-2026-89157`,
+`CVE-2026-89161`, and `CVE-2026-103111`. The runtime builder pins the
+2026-10-04 Debian snapshot and
 bundles the corresponding `pcre2` source package with the image.
 
 - `CVE-2026-53615` is in util-linux's DOS/EBR parser. Only `setsid` is retained;

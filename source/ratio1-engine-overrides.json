@@ -305,11 +305,11 @@
       "vendorModulesSha256": "ba79d5d4e92b21bfe85aa1aa23615088800fd06dca09e0ddcd1ba782b4990c12"
     },
     "distributed": {
-      "goModSha256": "18fae0e5364792cda8d276e4aed3f4d274e113f588e06a3914f96b22de9b3a10",
-      "goSumSha256": "26b437b7767e83074cb270517dc77c52140b273a775d76aa193fbdbd7d8f9dbb",
-      "vendorModulesSha256": "68bcd68d46b3ae82160b70c1e202c86ee404d77434ed079942107caeda3b81bd"
+      "goModSha256": "bf65b9614c3d4083a3c8955a6a7b73eb104fdc626c59baaef4ff5cfece63b3c6",
+      "goSumSha256": "cce2ab3dcd017053099402e9d661de8f813e2028acd0b77751d22e7c95847354",
+      "vendorModulesSha256": "5ff713b0dbcb1901342f25aa18b44e4b9ba189508e409e7aec746f1fe09c945d"
     },
-    "reason": "Refresh the retained OSS runtime dependency closure for the pinned Go 1.26.6 toolchain and published security fixes."
+    "reason": "Refresh the retained OSS runtime dependency closure for the pinned Go 1.26.10 toolchain and published security fixes."
   },
   "dependencyCompatibilityBackports": [
     {

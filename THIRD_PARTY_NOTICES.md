@@ -78,7 +78,7 @@ Exact source URLs, revisions, and tree hashes are in
 ## Cloudflared
 
 The runtime image builds the Cloudflare Tunnel client from Apache-2.0 source
-commit `b4f47e2ab538ab6e31d3dc6adc5489455ad446de`. The exact source archive,
+commit `35b379ac174d60a4301615defedc821de5625cef` (2026.10.6). The exact source archive,
 archive SHA-256, Git tree, source file hashes, Go toolchain, build flags, and
 resulting binary SHA-256 are recorded in `source/provenance.json` and enforced
 during the image build. No prebuilt Cloudflared image or binary is consumed.
@@ -86,13 +86,15 @@ during the image build. No prebuilt Cloudflared image or binary is consumed.
 The top-level Cloudflared license is retained at
 `licenses/cloudflared/LICENSE`. `source/cloudflared-buildinfo.txt` records the
 embedded Go module graph and `source/cloudflared-compiled-packages.txt` records
-the 603-package compile closure. `source/cloudflared-license-inventory.csv`
+the 618-package compile closure. `source/cloudflared-license-inventory.csv`
 maps every compiled component to a non-empty SPDX conclusion and immutable
-source URL. All 95 notice files named LICENSE, COPYING, NOTICE, or PATENTS from
-the exact vendored source are retained under
+source URL. Dependencies are downloaded against upstream's checked-in module
+sums and then vendored before an offline build. The module source commits and
+sums are recorded in `source/cloudflared-module-sources.json`. All 95 notice files
+named LICENSE, COPYING, NOTICE, or PATENTS from the generated vendor tree are retained under
 `licenses/cloudflared/dependencies/` and embedded in the runtime image.
 
-Cloudflare's vendor snapshot omits the lowercase MIT license file for compiled
+The generated vendor tree omits the lowercase MIT license file for compiled
 module `github.com/facebookgo/grace`. Ratio1 separately retains that exact file
 as one additional MIT license at
 `licenses/cloudflared/dependencies/github.com/facebookgo/grace/license`, making

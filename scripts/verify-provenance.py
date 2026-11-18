@@ -221,9 +221,12 @@ def check_build_input(build_inputs: dict, dockerfile: str, build_info: str) -> N
       fail(f"Dockerfile does not enforce the Cloudflared {label}")
   if re.search(r"FROM\s+cloudflare/cloudflared", dockerfile, re.IGNORECASE):
     fail("Dockerfile must build Cloudflared from pinned source")
-  if "/cloudflared: go1.26.6" not in build_info:
+  cloud_builder = cloudflared.get("goBuilder", "")
+  if not re.fullmatch(r"golang:1\.27\.3-bookworm@sha256:[0-9a-f]{64}", cloud_builder) or cloud_builder not in dockerfile:
+    fail("Cloudflared Go builder is not separately tag-and-digest pinned")
+  if "/cloudflared: go1.27.3" not in build_info:
     fail("Cloudflared was not built with the pinned Go toolchain")
-  if "\tdep\tgoogle.golang.org/grpc\tv1.83.0\t" not in build_info:
+  if "\tdep\tgoogle.golang.org/grpc\tv1.83.2\t" not in build_info:
     fail("Cloudflared does not embed the reviewed gRPC version")
 
   release_tooling = build_inputs.get("releaseTooling")
@@ -275,8 +278,8 @@ def check_engine_dependency_snapshot(upstream: dict) -> None:
     "goSumSha256": ROOT / "engine" / "go.sum",
     "vendorModulesSha256": ROOT / "engine" / "vendor" / "modules.txt",
   }
-  if snapshot.get("goVersion") != "1.25.0":
-    fail("engine dependency snapshot must use Go 1.25 language semantics")
+  if snapshot.get("goVersion") != "1.26.0":
+    fail("engine dependency snapshot must use Go 1.26 language semantics")
   for key, path in expected.items():
     if snapshot.get(key) != file_sha256(path):
       fail(f"engine dependency snapshot differs: {key}")
@@ -452,6 +455,45 @@ def check_source_dependency_baseline(baseline: dict, upstream_root: Path | None)
     fail("source baseline vendor module snapshot differs")
 
 
+def check_security_backport_preimage(preimage_commit: str, record: dict) -> None:
+  # Exported source and Docker contexts deliberately omit Git metadata. Their
+  # distributed hashes are still checked by check_engine_overrides; repository
+  # validation must verify the historical bytes and may not skip missing commits.
+  metadata = ROOT / ".git"
+  if not metadata.exists() and not metadata.is_symlink():
+    return
+  repository = subprocess.run(
+    ["git", "rev-parse", "--show-toplevel"],
+    cwd=ROOT,
+    check=False,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.DEVNULL,
+    text=True,
+  )
+  if repository.returncode != 0 or Path(repository.stdout.strip()).resolve() != ROOT.resolve():
+    fail("security backport preimage checkout is unavailable or resolves to another repository")
+  probe = subprocess.run(
+    ["git", "cat-file", "-e", f"{preimage_commit}^{{commit}}"],
+    cwd=ROOT,
+    check=False,
+    stdout=subprocess.DEVNULL,
+    stderr=subprocess.DEVNULL,
+  )
+  if probe.returncode != 0:
+    fail(f"security backport preimage commit is unavailable: {preimage_commit}; fetch the full repository history")
+  result = subprocess.run(
+    ["git", "show", f"{preimage_commit}:{record['path']}"],
+    cwd=ROOT,
+    check=False,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.DEVNULL,
+  )
+  if result.returncode != 0:
+    fail(f"security backport preimage file is unavailable: {preimage_commit}:{record['path']}")
+  if hashlib.sha256(result.stdout).hexdigest() != record["preimageSha256"]:
+    fail(f"security backport preimage hash differs: {record['path']}")
+
+
 def check_engine_overrides(upstream_commit: str, patch_record: str, upstream_root: Path | None) -> None:
   overrides = json.loads(OVERRIDES.read_text(encoding="utf-8"))
   if overrides.get("upstreamCommit") != upstream_commit:
@@ -567,22 +609,7 @@ def check_engine_overrides(upstream_commit: str, patch_record: str, upstream_roo
       if preimage_hash is not None:
         if preimage_commit is None or not re.fullmatch(r"[0-9a-f]{64}", preimage_hash):
           fail(f"security backport preimage hash is invalid: {record.get('path')}")
-        probe = subprocess.run(
-          ["git", "cat-file", "-e", f"{preimage_commit}^{{commit}}"],
-          cwd=ROOT,
-          check=False,
-          stdout=subprocess.DEVNULL,
-          stderr=subprocess.DEVNULL,
-        )
-        if probe.returncode == 0:
-          source = subprocess.run(
-            ["git", "show", f"{preimage_commit}:{record['path']}"],
-            cwd=ROOT,
-            check=True,
-            stdout=subprocess.PIPE,
-          ).stdout
-          if hashlib.sha256(source).hexdigest() != preimage_hash:
-            fail(f"security backport preimage hash differs: {record.get('path')}")
+        check_security_backport_preimage(preimage_commit, record)
 
   compatibility_backports = overrides.get("dependencyCompatibilityBackports")
   backport_ids = {

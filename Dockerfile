@@ -1,43 +1,53 @@
 # syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 
-FROM golang:1.26.6-bookworm@sha256:116d58cbd88c1297624acc6e967a060012422bacf9930927e23fb719189c6f36 AS cloudflared-builder
+FROM golang:1.27.3-bookworm@sha256:d9b6a1beb9474adc2a1ce842573639b44b2a0dd49b6669f51d3821baf9ec37c9 AS cloudflared-builder
 
-ARG CLOUDFLARED_COMMIT=b4f47e2ab538ab6e31d3dc6adc5489455ad446de
-ARG CLOUDFLARED_VERSION=2026.7.3-r1.b4f47e2
+ARG CLOUDFLARED_COMMIT=35b379ac174d60a4301615defedc821de5625cef
+ARG CLOUDFLARED_VERSION=2026.10.6-r1.35b379a.net062
+
+ENV GOTOOLCHAIN=local
+
+ADD --checksum=sha256:ee21af3280b31559b257e40ff6024956c066e3da6fded6810bf2b3e4749c1186 \
+  https://github.com/cloudflare/cloudflared/archive/35b379ac174d60a4301615defedc821de5625cef.tar.gz \
+  /tmp/cloudflared.tar.gz
+
+RUN mkdir /cloudflared \
+  && tar -xzf /tmp/cloudflared.tar.gz --strip-components=1 -C /cloudflared \
+  && rm /tmp/cloudflared.tar.gz
+
+WORKDIR /cloudflared
+
+COPY security/dependency-updates/cloudflared-xnet-0.62.0.patch /tmp/cloudflared-xnet-0.62.0.patch
+RUN printf '%s  %s\n' \
+      '674b39f17f8acf87383c0923a3283c9505116e7ac74a7396cd1961938e2243d1' '/tmp/cloudflared-xnet-0.62.0.patch' \
+      '0d4836d7b0b8eb8881170fe5c7b50050c71d4e48d1b501b64c1adebe28e571e3' 'go.mod' \
+      '704c1f1bc4feb38d82c674cdfc25dac9ac12432976e2f92f27ea0769e53189fc' 'go.sum' \
+    | sha256sum -c - \
+  && git apply --check /tmp/cloudflared-xnet-0.62.0.patch \
+  && git apply /tmp/cloudflared-xnet-0.62.0.patch \
+  && printf '%s  %s\n' \
+      '415401dc2364150146bcb015ac7f76aea617ab08cf8c86ef2dd1ab49bba4d103' 'go.mod' \
+      '1ad5bf5edb8d16f427318c309bffbf36069a70a69cd16fb18f44554eb8687de6' 'go.sum' \
+    | sha256sum -c -
+
+RUN --mount=type=cache,target=/go/pkg/mod \
+  go mod download \
+  && go mod verify \
+  && go mod vendor
 
 ENV GOPROXY=off \
     GOSUMDB=off
 
-ADD --checksum=sha256:e897f2cdb6f63964bb7b5841df80087489a65ab9fda356ef48dd13202bba59c0 \
-  https://github.com/cloudflare/cloudflared/archive/b4f47e2ab538ab6e31d3dc6adc5489455ad446de.tar.gz \
-  /tmp/cloudflared.tar.gz
-
-COPY security/backports/grpc-go-cve-2026-84304-v1.83.0.patch /tmp/grpc-go-cve-2026-84304.patch
-
-RUN printf '%s  %s\n' \
-      'c98442d4f6badbb1b0adcfa79dc28478eb105d1cdbad4ca232c85f4a3c653043' \
-      '/tmp/grpc-go-cve-2026-84304.patch' \
-    | sha256sum -c - \
-  && mkdir /cloudflared \
-  && tar -xzf /tmp/cloudflared.tar.gz --strip-components=1 -C /cloudflared \
-  && git -C /cloudflared apply --directory=vendor/google.golang.org/grpc --unidiff-zero \
-       --check /tmp/grpc-go-cve-2026-84304.patch \
-  && git -C /cloudflared apply --directory=vendor/google.golang.org/grpc --unidiff-zero \
-       /tmp/grpc-go-cve-2026-84304.patch \
-  && rm /tmp/cloudflared.tar.gz /tmp/grpc-go-cve-2026-84304.patch
-
-WORKDIR /cloudflared
-
-RUN --mount=type=cache,target=/root/.cache/go-build \
+RUN --network=none --mount=type=cache,target=/root/.cache/go-build \
   go test -mod=vendor ./cmd/cloudflared/... ./carrier/... ./tunnelrpc/...
 
-RUN --mount=type=cache,target=/root/.cache/go-build \
+RUN --network=none --mount=type=cache,target=/root/.cache/go-build \
   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 \
   go build -mod=vendor -trimpath -buildvcs=false \
-    -ldflags="-s -w -X main.Version=${CLOUDFLARED_VERSION} -X main.BuildTime=2026-08-12-16:57_UTC -X github.com/cloudflare/cloudflared/metrics.Runtime=virtual" \
+    -ldflags="-s -w -X main.Version=${CLOUDFLARED_VERSION} -X main.BuildTime=2026-10-29-11:55_UTC -X github.com/cloudflare/cloudflared/metrics.Runtime=virtual" \
     -o /out/cloudflared ./cmd/cloudflared \
   && printf '%s  %s\n' \
-      'd6e54c10c671c061bcb04404c9e2fd7dedb4f5f8a4d9b9ec1b35b6fa1973b62d' \
+      'c5d7f352ae6036deb65c94dafb64f05e30f47b83ab69cec3cfe37eed36839fd6' \
       '/out/cloudflared' \
     | sha256sum -c -
 
@@ -47,9 +57,9 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 \
   go build -trimpath -buildvcs=false -ldflags='-s -w' \
     -o /out/r1-atomic-replace /tmp/atomic-replace.go
 
-FROM golang:1.26.6-bookworm@sha256:116d58cbd88c1297624acc6e967a060012422bacf9930927e23fb719189c6f36 AS engine-builder
+FROM golang:1.26.10-bookworm@sha256:23ce71337b726608afb1bc00986e630a05034a87a87ea1fc2cd1ae5cf33387eb AS engine-builder
 
-ARG RATIO1_VERSION=v1.0.9
+ARG RATIO1_VERSION=v1.0.10
 ARG SOURCE_DATE_EPOCH=1727820937
 ARG BUILD_JOBS=4
 
@@ -57,6 +67,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     GOPROXY=off \
     GOSUMDB=off
 
+# The digest-pinned Go image already supplies the build-stage CA bundle.
 RUN printf '%s\n' \
       'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260812T000000Z bookworm main' \
       'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20260812T000000Z bookworm-security main' \
@@ -65,7 +76,6 @@ RUN printf '%s\n' \
   && apt-get -o Acquire::Check-Valid-Until=false update \
   && apt-get install -y --no-install-recommends \
     autoconf=2.71-3 \
-    ca-certificates=20230311+deb12u1 \
     cmake=3.25.1-1 \
     g++=4:12.2.0-3 \
     gcc=4:12.2.0-3 \
@@ -92,6 +102,7 @@ RUN python3 scripts/verify-source-boundary.py --worktree-only \
 
 RUN --mount=from=cloudflared-builder,source=/cloudflared,target=/cloudflared,ro \
     --mount=from=cloudflared-builder,source=/out/cloudflared,target=/cloudflared-bin,ro \
+    --mount=from=cloudflared-builder,source=/usr/local/go,target=/usr/local/go,ro \
   python3 scripts/verify-cloudflared-source.py \
     --source-root /cloudflared \
     --binary /cloudflared-bin
@@ -120,8 +131,11 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
   && cp security/openvex.json /out/licenses/security/ \
   && cp source/provenance.json source/license-inventory.json \
        source/cloudflared-buildinfo.txt source/cloudflared-license-inventory.csv \
+       source/cloudflared-compiled-packages.txt source/cloudflared-module-sources.json \
+       source/cloudflared-go.mod source/cloudflared-go.sum \
        source/vendor-license-manifest.json \
        /out/licenses/source/ \
+  && cp security/dependency-updates/cloudflared-xnet-0.62.0.patch /out/licenses/source/ \
   && cp -a engine/licenses/. /out/licenses/engine/ \
   && cp engine/AUTHORS /out/licenses/engine/AUTHORS \
   && cp engine/c-deps/geos/COPYING /out/licenses/engine/GEOS-COPYING \
@@ -137,17 +151,17 @@ FROM debian:bookworm-slim@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN printf '%s\n' \
-      'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260924T000000Z bookworm main' \
-      'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20260924T000000Z bookworm-security main' \
-      'deb-src [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260924T000000Z bookworm main' \
-      'deb-src [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20260924T000000Z bookworm-security main' \
+      'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20261004T000000Z bookworm main' \
+      'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20261004T000000Z bookworm-security main' \
+      'deb-src [check-valid-until=no] http://snapshot.debian.org/archive/debian/20261004T000000Z bookworm main' \
+      'deb-src [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20261004T000000Z bookworm-security main' \
       > /etc/apt/sources.list \
   && rm -f /etc/apt/sources.list.d/debian.sources \
   && apt-get -o Acquire::Check-Valid-Until=false update \
   && apt-get install -y --no-install-recommends \
     bash=5.2.15-2+b13 \
     ca-certificates=20230311+deb12u1 \
-    libpcre2-8-0=10.42-1+deb12u1 \
+    libpcre2-8-0=10.42-1+deb12u2 \
     libtinfo6=6.4-4
 
 COPY --chmod=755 scripts/assemble-runtime-rootfs.sh /usr/local/bin/assemble-runtime-rootfs
@@ -171,7 +185,7 @@ FROM scratch
 
 ARG BUILD_DATE=""
 ARG RATIO1_REVISION="unknown"
-ARG RATIO1_VERSION="v1.0.9"
+ARG RATIO1_VERSION="v1.0.10"
 
 LABEL org.opencontainers.image.title="R1DB" \
       org.opencontainers.image.description="Distributed SQL database runtime for Ratio1 edge nodes" \
