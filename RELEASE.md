@@ -11,20 +11,19 @@ Before the first release, repository administrators must:
 1. Protect `main` and require the CI workflow before merge.
 2. Create the `release` environment with required reviewers and restrict it to
    the protected `main` branch.
-3. Create the `release-cleanup` environment without required reviewers and
-   restrict it to the protected `main` branch. This environment is only for
-   exact-attempt rollback and must contain no signing, package, or release
-   publication secrets.
-4. Prevent tag deletion or mutation for released tags.
-5. Permit the repository workflow to publish the connected GHCR package.
-6. Add `CF_ACCOUNT_ID`, `CF_ZONE_ID`, `CF_API_TOKEN`, and `CF_BASE_DOMAIN` as
-   protected release-environment secrets. Use a dedicated token restricted to
-   Cloudflare Tunnel edit plus DNS edit and zone read for one disposable zone.
-   Add only those same four names to `release-cleanup`, preferably with a
-   separate token of the same minimum scope. If the release token must be reused
-   temporarily, record that operational exception and rotate it when separate
-   token-management access is available.
-7. Make the source repository public before merging a `VERSION` change. It may stay
+3. Prevent tag deletion or mutation for released tags.
+4. Permit the repository workflow to publish the connected GHCR package.
+5. Remove the legacy `CF_ACCOUNT_ID`, `CF_ZONE_ID`, `CF_API_TOKEN`, and
+   `CF_BASE_DOMAIN` secrets from repository and Actions environments, including
+   `release` and `release-cleanup`; revoke the former CI API tokens in Cloudflare.
+   Coordinate revocation if a token was shared with another consumer. Remove the
+   obsolete `release-cleanup` environment after any outstanding historical
+   resource cleanup. These are administrator actions: merging this workflow
+   change neither deletes stored secrets nor invalidates previously exposed ones.
+   Do not provide Cloudflare credentials to candidate-executing Actions jobs.
+   Historical workflow reruns still use their old credential references; revoke
+   old tokens and remove stored secrets before retrying those runs.
+6. Make the source repository public before merging a `VERSION` change. It may stay
    private while changes are staged and reviewed, but a public image is not
    published from source that anonymous recipients cannot retrieve. Keep the
    corresponding tagged source public for as long as that image is distributed.
@@ -44,31 +43,36 @@ The **Release latest signed image** workflow uses one repository-wide concurrenc
 so release promotion cannot overlap and pending version releases are retained
 up to GitHub's concurrency-group limit.
 
-The candidate also has to pass a persisted rolling upgrade and rollback against
-the immutable legacy service image, plus a three-node test using the unchanged
-candidate image and three ephemeral real Cloudflare tunnels. Cleanup is
-fail-closed: release promotion stops if any DNS record or tunnel cannot be
-removed.
+The candidate must pass mandatory local database/API, three-node replication,
+persistence, rolling upgrade/rollback, supervision and corrupt-store recovery
+tests. Local TCP proxies exercise the production entrypoint; Cloudflare API
+mocks exercise provisioning and cleanup without account credentials.
+
+CI and release also run an accountless Quick Tunnel HTTP smoke using the
+candidate's own embedded cloudflared and a disposable synthetic HTTP fixture.
+No database endpoint is exposed. A verified public round trip is `passed`;
+recognizable provider/network unavailability is `inconclusive`, with a workflow
+warning and explicit evidence. Image, fixture, unexpected output and local
+cleanup defects are `failed` and block publication. External availability does
+not bypass any mandatory local test. Quick Tunnel HTTP does not validate named
+authenticated TCP tunnels, DNS/account provisioning, or the deployed fleet.
+The workflow summary and `quick-tunnel-result.json` release asset report that
+scope, candidate identity and outcome; `inconclusive` must never be treated as a
+successful real-transport test.
 An untagged candidate digest is not a release and must not be used by consumers.
 Only a published immutable digest that passes `scripts/verify-image.sh` is an
 approved release artifact. Failed candidate digests may remain addressable in
 GHCR, but they receive no version tag, source release, or `latest` tag.
-If remote cleanup fails, the workflow deletes tunnel tokens but retains the
-non-secret tunnel/DNS identifiers as `cloudflare-cleanup-state.json` in the
-attempt-scoped `r1db-cloudflare-cleanup-<run ID>-<run attempt>`
-artifact for seven days. The Cloudflare cleanup recovery workflow, **Recover
-ephemeral Cloudflare resources**, runs automatically after a failed, cancelled,
-or timed-out release. An operator can also dispatch it from `main` with the
-source run ID and, when needed, its run attempt. The recovery validates the
-source run and re-discovers only resources in that exact attempt namespace;
-identifiers from the artifact never select resources for deletion.
-Its `inspect` job has no environment and no Cloudflare secrets, so a release that
-failed before allocation is classified immediately. Only a positive inspection
-starts the `cleanup` job in `release-cleanup`. That job rolls back resources
-already attributable to the approved release attempt without a second release
-approval; it does not authorize signing, publication, arbitrary prefixes, or
-resources from another run. Operators must still confirm that automatic or
-manually dispatched recovery completes and leaves the exact prefix empty.
+
+Full named TCP validation remains a manual pre-stable requirement on an isolated
+testbed with a dedicated test-only Cloudflare account and zone, outside GitHub
+Actions. Run `testbed/run-real-cloudflare-cluster.sh` against the exact signed
+release digest and retain its result before promoting stable. See
+`testbed/README.md`; production credentials must not enter that testbed either.
+Historical failed runs may still have resources: use their exact run/attempt
+prefix and retained non-secret cleanup state with the manual cleanup tooling.
+Removing the automated recovery workflow does not clean historical resources.
+An independently controlled automated named-tunnel validator is future work.
 
 ## First Package Publication
 

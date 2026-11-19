@@ -83,7 +83,7 @@ jobs:
           python3 scripts/verify-public-test-fixtures.py
           python3 scripts/verify-security-vex.py
           python3 scripts/generate-source-manifest.py --check
-          python3 -m unittest tests.test_release_contract tests.test_sbom_contract tests.test_cloudflared_source_contract tests.test_october_security_contract tests.test_runtime_supervision_contract
+          python3 -m unittest tests.test_release_contract tests.test_sbom_contract tests.test_cloudflared_source_contract tests.test_october_security_contract tests.test_runtime_supervision_contract tests.test_cloudflare_ephemeral_tunnels tests.test_cloudflare_cleanup_recovery tests.test_quick_tunnel_smoke
           bash -n entrypoint.sh scripts/*.sh testbed/*.sh
 
       - name: Validate immutable source release identity
@@ -314,17 +314,31 @@ jobs:
           timeout --signal=TERM --kill-after=120s 45m \
             scripts/runtime-supervision-smoke.sh "$IMAGE_REF" fixed
 
-      - name: Run unchanged candidate through real ephemeral Cloudflare tunnels
+      # This public HTTP fixture needs no account credentials and contains no database data.
+      - name: Smoke test accountless Quick Tunnel
+        timeout-minutes: 5
         env:
           IMAGE_REF: ${{ steps.image.outputs.ref }}
-          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
-          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-          CF_BASE_DOMAIN: ${{ secrets.CF_BASE_DOMAIN }}
-          R1DB_EVIDENCE_DIR: ${{ github.workspace }}/artifacts/real-cloudflare
         run: |
-          timeout --signal=TERM --kill-after=10m 30m \
-            testbed/run-real-cloudflare-cluster.sh "$IMAGE_REF"
+          set -euo pipefail
+          result=artifacts/quick-tunnel/result.json
+          smoke_exit=0
+          python3 scripts/quick_tunnel_smoke.py --image "$IMAGE_REF" \
+            --output "$result" --timeout 120 || smoke_exit=$?
+          if [[ -s "$result" ]]; then
+            cp "$result" artifacts/quick-tunnel-result.json
+            status="$(jq -er '.status | select(. == "passed" or . == "inconclusive" or . == "failed")' "$result")"
+            printf 'Quick Tunnel HTTP: **%s**. Named authenticated TCP: **not run**.\n' "$status" >> "$GITHUB_STEP_SUMMARY"
+            if [[ "$status" == "inconclusive" ]]; then
+              echo '::warning::Quick Tunnel service/network unavailable; HTTP coverage is inconclusive. Named TCP was not tested.'
+            elif [[ "$status" == "failed" ]]; then
+              smoke_exit=1
+            fi
+          else
+            echo 'Quick Tunnel produced no result; validation failed.' >> "$GITHUB_STEP_SUMMARY"
+            smoke_exit=1
+          fi
+          exit "$smoke_exit"
 
       - name: Record raw candidate findings
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
@@ -501,9 +515,7 @@ jobs:
             artifacts/*.json
             artifacts/*.txt
             artifacts/*.tar.gz
-            artifacts/real-cloudflare/summary.txt
-            artifacts/real-cloudflare/topology.json
-            artifacts/real-cloudflare/node-*.log
+            artifacts/quick-tunnel/
             artifacts/rolling-upgrade/
             image-reference.txt
             LICENSE
@@ -521,15 +533,6 @@ jobs:
             source/runtime-package-sources.tsv
           if-no-files-found: warn
           retention-days: 90
-
-      - name: Upload non-secret Cloudflare cleanup state on failure
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: r1db-cloudflare-cleanup-${{ github.run_id }}-${{ github.run_attempt }}
-          path: artifacts/real-cloudflare/cloudflare-cleanup-state.json
-          if-no-files-found: ignore
-          retention-days: 7
 
       - name: Preflight resumable immutable release identifiers
         id: preflight
