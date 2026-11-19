@@ -328,11 +328,12 @@ operation is no longer supported.
 - Pins Buildx, BuildKit, Syft, Trivy, and Cosign versions in both provenance and
   workflows. A release performs one digest-only build, validates that immutable
   registry candidate, and adds public tags only after signing succeeds.
-- Names disposable Cloudflare release resources by exact GitHub run and attempt,
-  preserves only non-secret cleanup identifiers for seven days, and runs an
-  independent least-privilege recovery workflow after failed or cancelled
-  release attempts. Manual recovery accepts an explicit failed run and optional
-  attempt; both paths reject unrelated runs and exact-prefix near matches.
+- Keeps Cloudflare account credentials outside GitHub Actions. Required local
+  transport and API mock tests are supplemented by an accountless Quick Tunnel
+  HTTP smoke using the candidate's embedded connector and a synthetic fixture.
+  Provider/network unavailability is recorded as inconclusive; image, fixture
+  and cleanup defects fail. Named authenticated TCP validation and historical
+  resource cleanup remain manual on an isolated test-only account.
 - Refreshes every asset of a resumable draft release, requires its asset set to
   exactly match the current release contract, and compares its published image
   reference with the validated candidate before image-tag promotion. A failed

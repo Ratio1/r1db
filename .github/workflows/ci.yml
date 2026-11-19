@@ -22,6 +22,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Verify source and release contracts
         run: |
@@ -31,7 +32,7 @@ jobs:
           python3 scripts/verify-public-test-fixtures.py
           python3 scripts/verify-security-vex.py
           python3 scripts/generate-source-manifest.py --check
-          python3 -m unittest tests.test_release_contract tests.test_sbom_contract tests.test_cloudflared_source_contract tests.test_october_security_contract tests.test_runtime_supervision_contract
+          python3 -m unittest tests.test_release_contract tests.test_sbom_contract tests.test_cloudflared_source_contract tests.test_october_security_contract tests.test_runtime_supervision_contract tests.test_cloudflare_ephemeral_tunnels tests.test_cloudflare_cleanup_recovery tests.test_quick_tunnel_smoke
           bash -n entrypoint.sh scripts/*.sh testbed/*.sh
 
       - name: Verify Ratio1 overrides against exact upstream source
@@ -145,6 +146,29 @@ jobs:
           timeout --signal=TERM --kill-after=120s 45m \
             scripts/runtime-supervision-smoke.sh r1db:ci fixed
 
+      # This public HTTP fixture needs no account credentials and contains no database data.
+      - name: Smoke test accountless Quick Tunnel
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          result=artifacts/quick-tunnel/result.json
+          smoke_exit=0
+          python3 scripts/quick_tunnel_smoke.py --image r1db:ci \
+            --output "$result" --timeout 120 || smoke_exit=$?
+          if [[ -s "$result" ]]; then
+            status="$(jq -er '.status | select(. == "passed" or . == "inconclusive" or . == "failed")' "$result")"
+            printf 'Quick Tunnel HTTP: **%s**. Named authenticated TCP: **not run**.\n' "$status" >> "$GITHUB_STEP_SUMMARY"
+            if [[ "$status" == "inconclusive" ]]; then
+              echo '::warning::Quick Tunnel service/network unavailable; HTTP coverage is inconclusive. Named TCP was not tested.'
+            elif [[ "$status" == "failed" ]]; then
+              smoke_exit=1
+            fi
+          else
+            echo 'Quick Tunnel produced no result; validation failed.' >> "$GITHUB_STEP_SUMMARY"
+            smoke_exit=1
+          fi
+          exit "$smoke_exit"
+
       - name: Generate image SPDX SBOM
         uses: anchore/sbom-action@8e94d75ddd33f69f691467e42275782e4bfefe84
         with:
@@ -241,5 +265,6 @@ jobs:
             cloudflared.buildinfo.txt
             trivy-raw.json
             artifacts/rolling-upgrade/
+            artifacts/quick-tunnel/
           if-no-files-found: error
           retention-days: 30

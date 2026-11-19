@@ -46,28 +46,54 @@ three-voter replication after each rejoin, unchanged database/entrypoint bytes
 in the test transport overlays, and persistence of both operator and delegated
 user data.
 
-The signed-release workflow runs `run-real-cloudflare-cluster.sh` against the
-unchanged immutable candidate before any human-facing image tag is created. It
-creates three ephemeral tunnels under a disposable release subdomain, places
-every node on a separate Docker bridge, validates replication and one-node
-failover through the real tunnel path, checks process environments and logs for
-secrets, and deletes all DNS and tunnel resources on exit.
-If Cloudflare rejects cleanup after retries, token files are deleted and the
-non-secret resource identifiers are retained as
-`cloudflare-cleanup-state.json` in a seven-day, attempt-specific artifact. The
-`Recover ephemeral Cloudflare resources` workflow runs automatically after an
-unsuccessful release attempt. It validates the exact repository, workflow,
-branch, run ID, and attempt before using that state, then verifies the
-deterministic `r1db-ci-<run-id>-<attempt>` namespace through the Cloudflare
-API. If the artifact is unavailable after runner loss, the same exact-prefix
-lookup removes matching DNS records and tunnels without touching adjacent run
-or attempt namespaces.
+CI and release use **no Cloudflare account credentials**. Mandatory local
+transport tests remain required, and Cloudflare API mocks cover provisioning,
+rollback, exact-prefix cleanup and recovery decisions. They also run:
 
-The recovery workflow can also be started manually from GitHub Actions with a
-failed release run ID. Leaving the attempt empty selects the latest completed
-attempt; specify an older failed attempt after a rerun. Successful, active,
-foreign-repository, non-main, and non-release attempts are rejected. Cleanup is
-idempotent, and downloaded artifact content is treated only as validated data.
+```bash
+python3 scripts/quick_tunnel_smoke.py \
+  --image ghcr.io/ratio1/r1db@sha256:<verified-digest> \
+  --output artifacts/quick-tunnel/result.json --timeout 120
+```
+
+The accountless Quick Tunnel HTTP smoke runs the image's embedded cloudflared
+against a disposable nonce-only HTTP container on its own Docker bridge. No
+ports are published locally, no database endpoint is tunneled, and no account
+resources, credentials or DNS records are created by the harness. It removes its
+own containers and bridge on exit. `passed` requires an exact public HTTP round
+trip. Recognizable provider/network outages are `inconclusive` and explicitly
+warned in Actions; they are not proof of working transport. Deterministic image,
+fixture, response and local cleanup defects are `failed` and block the workflow.
+Results and connector diagnostics are uploaded even on failure. Quick Tunnel
+HTTP does not prove named authenticated TCP or account provisioning.
+
+For full named TCP validation **before stable promotion**, run
+`run-real-cloudflare-cluster.sh` manually outside Actions with the exact signed
+image digest and a dedicated test-only Cloudflare account/zone. It creates three
+ephemeral tunnels, places each node on a separate Docker bridge, validates real
+replication and failover, audits logs/environments, and removes test resources.
+Supply `CF_ACCOUNT_ID`, `CF_ZONE_ID`, `CF_API_TOKEN`, and `CF_BASE_DOMAIN` only
+inside that isolated environment, never GitHub Actions or a production account.
+The token needs Tunnel edit for the test account and DNS edit/zone read for its
+test zone. Retain the result and candidate digest for the promotion decision.
+
+If manual or historical cleanup fails, token files are removed and non-secret
+resource IDs remain in `cloudflare-cleanup-state.json`. Reconcile only the exact
+run prefix with the existing manual tooling; never guess a production prefix:
+
+```bash
+python3 scripts/cloudflare_ephemeral_tunnels.py cleanup \
+  --state /path/to/cloudflare-cleanup-state.json \
+  --expected-run-prefix r1db-ci-<run-id>-<attempt>
+python3 scripts/cloudflare_ephemeral_tunnels.py cleanup-prefix \
+  --prefix r1db-ci-<run-id>-<attempt>
+```
+
+Supply credentials through the isolated environment, not command arguments.
+Verify cleanup completes before destroying that test environment. The old
+credentialed Actions recovery workflow has been removed; outstanding historical
+resources and stored tokens require administrator cleanup/revocation as described
+in `RELEASE.md`.
 
 CI and release also run `scripts/runtime-supervision-smoke.sh` against the
 exact candidate. Its scratch-compatible multistage overlay preserves the
@@ -75,10 +101,3 @@ candidate database binary and production entrypoint byte-for-byte while adding
 only static test transport and fault-injection wrappers. This validates process
 supervision and corrupt-store recovery without installing tools into, or
 rebuilding, the production image.
-
-The protected `release` environment must provide scoped `CF_ACCOUNT_ID`,
-`CF_ZONE_ID`, `CF_API_TOKEN`, and `CF_BASE_DOMAIN` secrets. The API token must
-be dedicated to CI and limited to the selected account and disposable zone.
-Restrict that environment to the `main` branch. If it requires reviewer
-approval, automatic recovery waits for the same approval before using its
-Cloudflare credentials.

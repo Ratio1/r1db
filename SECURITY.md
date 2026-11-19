@@ -41,6 +41,16 @@ for a security release.
 
 ## Published Test Material
 
+GitHub Actions must not receive Cloudflare API or tunnel credentials. Required
+local transport tests and API mocks use disposable data; the accountless Quick
+Tunnel smoke exposes only a synthetic HTTP nonce fixture. Its outcome records
+external unavailability as inconclusive and does not claim named TCP validation.
+Full named-tunnel tests run outside Actions with an isolated test account. See
+`RELEASE.md` for removal and revocation of legacy stored CI credentials. GitHub
+publication/signing permissions remain governed by the protected release
+workflow; this change does not isolate all untrusted build execution from those
+permissions.
+
 The source tree includes upstream public TLS fixtures required by the OSS CLI
 dependency graph. They are explicitly nonproduction keys, are documented in
 `THIRD_PARTY_NOTICES.md`, and are locked by

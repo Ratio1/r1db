@@ -1096,7 +1096,7 @@ func value() string {
     self.assertIn("testbed/run-local-cluster.sh", read(".github/workflows/release.yml"))
     self.assertIn("testbed/run-rolling-upgrade.sh", read(".github/workflows/ci.yml"))
     self.assertIn("testbed/run-rolling-upgrade.sh", read(".github/workflows/release.yml"))
-    self.assertIn("testbed/run-real-cloudflare-cluster.sh", read(".github/workflows/release.yml"))
+    self.assertNotIn("testbed/run-real-cloudflare-cluster.sh", read(".github/workflows/release.yml"))  # Named TCP tests require credentials outside Actions.
     self.assertIn("scripts/runtime-supervision-smoke.sh", read(".github/workflows/ci.yml"))
     self.assertIn("scripts/runtime-supervision-smoke.sh", read(".github/workflows/release.yml"))
     self.assertIn("scripts/secure-single-node-smoke.sh", read(".github/workflows/ci.yml"))
@@ -1119,7 +1119,7 @@ func value() string {
     self.assertIn('[[ "${admin_membership_count}" != "1" ]]', secure_smoke)
     self.assertEqual(read(".github/workflows/ci.yml").count("path: source-snapshot"), 2)
     for secret in ("CF_ACCOUNT_ID", "CF_ZONE_ID", "CF_API_TOKEN", "CF_BASE_DOMAIN"):
-      self.assertIn("${{ secrets." + secret + " }}", read(".github/workflows/release.yml"))
+      self.assertNotIn("${{ secrets." + secret + " }}", workflow_text)  # No workflow may inject legacy Cloudflare credentials.
     release = read(".github/workflows/release.yml")
     self.assertIn("workflow_dispatch:", release)
     self.assertNotIn("push:\n    tags:", release)
@@ -1674,55 +1674,56 @@ printf '%s' "${FAKE_GITHUB_STATUS}"
     self.assertNotIn('${GITHUB_RUN_ATTEMPT:-0}-${RANDOM}', testbed)
     self.assertNotIn('prefix="${prefix:0:40}"', testbed)
 
-  def test_failed_release_has_exact_attempt_cloudflare_recovery(self):
-    release = read(".github/workflows/release.yml")
-    cleanup = read(".github/workflows/cloudflare-cleanup.yml")
-    runbook = read("RELEASE.md")
+  def test_actions_use_secretless_transport_validation(self):
+    workflows = list((ROOT / ".github/workflows").glob("*.yml"))  # Include recovery and manually dispatched workflows.
+    for path in workflows:
+      text = path.read_text(encoding="utf-8")  # Inspect every workflow, rather than only the main release path.
+      self.assertNotRegex(text, r"secrets\s*(?:\.\s*(?:CF_|CLOUDFLARE)|\[\s*['\"](?:CF_|CLOUDFLARE))")  # Reject both expression access syntaxes.
+      self.assertNotIn("scripts/cloudflare_ephemeral_tunnels.py", text)  # Account provisioning stays outside Actions.
+      self.assertNotIn("testbed/run-real-cloudflare-cluster.sh", text)  # Manual full TCP tests must not receive CI credentials.
+    self.assertFalse((ROOT / ".github/workflows/cloudflare-cleanup.yml").exists())  # Remove the other credential injection path too.
+    for filename in ("ci.yml", "release.yml"):
+      text = read(f".github/workflows/{filename}")  # CI and release must exercise the same helper.
+      self.assertIn("scripts/quick_tunnel_smoke.py", text)  # Exercise the embedded real connector without an account.
+      self.assertIn("artifacts/quick-tunnel/result.json", text)  # Preserve an explicit public-network outcome.
+      self.assertIn("artifacts/quick-tunnel/", text)  # Upload diagnostics even when the smoke fails.
+      self.assertIn("tests.test_quick_tunnel_smoke", text)  # Run negative classification and cleanup fixtures.
+      self.assertIn("tests.test_cloudflare_ephemeral_tunnels", text)  # Retain deterministic API provisioning mocks.
+      step = text.split("      - name: Smoke test accountless Quick Tunnel", 1)[1].split("      - name:", 1)[0]  # Limit failure-policy checks to the transport step.
+      self.assertNotIn("continue-on-error", step)  # Image, fixture, and cleanup failures must block the workflow.
+      self.assertNotIn("|| true", step)  # Do not turn deterministic defects into a best-effort pass.
+      self.assertIn('"$GITHUB_STEP_SUMMARY"', step)  # Surface inconclusive external coverage to the operator.
+      self.assertIn("inconclusive", step)  # Explain the distinction from a successful round trip.
+      self.assertIn("timeout-minutes: 5", step)  # Bound cleanup as well as network startup.
+    release = read(".github/workflows/release.yml")  # The release must test its immutable candidate.
+    self.assertIn('scripts/quick_tunnel_smoke.py --image "$IMAGE_REF"', release)  # Bind connectivity evidence to the tested digest.
+    for document in ("RELEASE.md", "testbed/README.md"):
+      text = read(document)  # Keep operator expectations aligned with actual coverage.
+      for marker in ("Quick Tunnel", "inconclusive", "named", "TCP"):
+        self.assertIn(marker, text)  # HTTP smoke cannot silently claim the full production transport passed.
+    self.assertIn("revoke", read("RELEASE.md"))  # Workflow removal does not invalidate old stored credentials.
 
-    self.assertIn("${{ github.run_id }}-${{ github.run_attempt }}", release)
-    self.assertIn("workflow_run:", cleanup)
-    self.assertIn("workflows: [Release signed image, Release latest signed image]", cleanup)
-    self.assertIn("workflow_dispatch:", cleanup)
-    self.assertIn("run_id:", cleanup)
-    self.assertIn("run_attempt:", cleanup)
-    self.assertIn("actions: read", cleanup)
-    self.assertIn("contents: read", cleanup)
-    self.assertNotIn("packages: write", cleanup)
-    self.assertNotIn("contents: write", cleanup)
-    self.assertNotIn("id-token: write", cleanup)
-    self.assertIn("scripts/cloudflare_cleanup_recovery.py", cleanup)
-    self.assertIn("cleanup-prefix", cleanup)
-    self.assertIn("github.event.workflow_run.id", cleanup)
-    self.assertIn("github.event.workflow_run.run_attempt", cleanup)
-
-    self.assertIn("\n  inspect:\n", cleanup)
-    self.assertIn("\n  cleanup:\n", cleanup)
-    inspect_job, cleanup_job = cleanup.split("\n  inspect:\n", 1)[1].split(
-      "\n  cleanup:\n", 1
-    )
-    self.assertNotIn("environment:", inspect_job)
-    self.assertNotIn("secrets.CF_", inspect_job)
-    self.assertIn("permissions:\n      actions: read\n      contents: read", inspect_job)
-    self.assertIn("outputs:", inspect_job)
-    self.assertIn("cleanup_needed:", inspect_job)
-    self.assertIn("needs: inspect", cleanup_job)
-    self.assertIn("needs.inspect.outputs.cleanup_needed == 'true'", cleanup_job)
-    self.assertIn("environment: release-cleanup", cleanup_job)
-    self.assertIn("permissions:\n      actions: read\n      contents: read", cleanup_job)
-    self.assertNotIn("environment: release\n", cleanup)
-    for secret in ("CF_ACCOUNT_ID", "CF_ZONE_ID", "CF_API_TOKEN", "CF_BASE_DOMAIN"):
-      reference = "${{ secrets." + secret + " }}"
-      self.assertNotIn(reference, inspect_job)
-      self.assertIn(reference, cleanup_job)
-    self.assertIn("Cloudflare cleanup recovery", runbook)
-    self.assertRegex(runbook, r"Recover\s+ephemeral Cloudflare resources")
-    self.assertIn("run ID", runbook)
-    self.assertIn("run attempt", runbook)
-    self.assertIn("seven days", runbook)
-    self.assertIn("release-cleanup", runbook)
-    self.assertRegex(runbook, r"without a second release\s+approval")
-    self.assertNotIn("in the release evidence", runbook)
-    self.assertNotIn("cloudflare_ephemeral_tunnels.py cleanup", runbook)
+  def test_quick_tunnel_workflow_preserves_failures_and_reports_outages(self):
+    for filename in ("ci.yml", "release.yml"):
+      text = read(f".github/workflows/{filename}")  # Execute the actual workflow block with only its external helper substituted.
+      step = text.split("      - name: Smoke test accountless Quick Tunnel", 1)[1].split("      - name:", 1)[0]  # Exclude neighboring gates.
+      script = "\n".join(line[10:] for line in step.split("        run: |\n", 1)[1].splitlines())  # Remove YAML indentation without changing shell control flow.
+      for status, helper_exit, expected_exit in (("passed", 0, 0), ("inconclusive", 0, 0), ("failed", 1, 1), ("failed", 0, 1), ("passed", 7, 7), ("missing", 0, 1), ("invalid", 0, 4)):
+        with self.subTest(workflow=filename, status=status, helper_exit=helper_exit), tempfile.TemporaryDirectory() as directory:
+          root = Path(directory)  # Give every result case an empty workspace.
+          executable = root / "bin/python3"  # Substitute only the Docker/network helper, keeping real Bash and jq.
+          executable.parent.mkdir()  # Keep the mock command ahead of system Python in PATH.
+          executable.write_text("#!/bin/bash\nmkdir -p artifacts/quick-tunnel\nif [[ $FAKE_STATUS != missing ]]; then printf '{\"status\":\"%s\"}\n' \"$FAKE_STATUS\" > artifacts/quick-tunnel/result.json; fi\nexit \"$FAKE_EXIT\"\n", encoding="utf-8")  # Emit a controlled helper result without Docker or network access.
+          executable.chmod(0o755)  # Allow Bash to resolve the test helper through PATH.
+          summary = root / "summary.md"  # Observe the operator-visible coverage statement.
+          env = dict(os.environ, PATH=str(executable.parent) + os.pathsep + os.environ["PATH"], GITHUB_STEP_SUMMARY=str(summary), IMAGE_REF="test@sha256:fixture", FAKE_STATUS=status, FAKE_EXIT=str(helper_exit))  # Use synthetic inputs only.
+          result = subprocess.run(["bash", "-c", script], cwd=root, env=env, capture_output=True, text=True, timeout=10)  # A broken shell block cannot hang the source gate.
+          self.assertEqual(result.returncode, expected_exit, result.stderr)  # Never swallow helper or result-validation failures.
+          if status in ("passed", "inconclusive", "failed"):
+            self.assertIn(f"**{status}**", summary.read_text())  # Preserve an honest summary even when the helper exits nonzero.
+            self.assertIn("TCP: **not run**", summary.read_text())  # HTTP evidence never claims authenticated TCP coverage.
+          if status == "inconclusive":
+            self.assertIn("::warning::", result.stdout)  # External outages remain visible despite a successful job exit.
 
   def test_public_fixture_allowlist_is_enforced(self):
     subprocess.run(
